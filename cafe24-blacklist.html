@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>블랙리스트 관리</title>
+<style>
+  :root{
+    --ink:#22262b;
+    --muted:#6b7280;
+    --bg:#f4f2ee;
+    --card:#ffffff;
+    --accent:#a8425c;
+    --accent-dark:#7f2f45;
+    --teal:#3a5a63;
+    --line:#e4e0d8;
+    --good:#2f7d5a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    padding:32px 16px 64px;
+  }
+  .wrap{max-width:680px;margin:0 auto;}
+  a.back{
+    display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:var(--muted);
+    text-decoration:none;margin-bottom:16px;
+  }
+  header{margin-bottom:24px;}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:12px;letter-spacing:.06em;color:var(--accent-dark);
+    background:#f3e3e7;padding:4px 10px;border-radius:20px;
+    font-weight:600;
+  }
+  h1{font-size:23px;margin:14px 0 6px;letter-spacing:-.01em;}
+  .sub{color:var(--muted);font-size:14px;line-height:1.6;margin:0;}
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:22px;
+    margin-bottom:16px;
+  }
+
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-bottom:4px;}
+  .field input{
+    width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;
+    font-size:14px;font-family:inherit;
+  }
+  .field input:focus{outline:none;border-color:var(--accent);}
+
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+  @media (max-width:560px){ .row3{grid-template-columns:1fr;} }
+
+  .btn{
+    border:none;border-radius:8px;padding:11px 18px;font-size:14px;font-weight:700;
+    cursor:pointer;transition:opacity .15s, transform .1s;
+  }
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn:not(:disabled):hover{transform:translateY(-1px);}
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-ghost{background:#eceae4;color:var(--ink);}
+  .btn-small{padding:6px 12px;font-size:12.5px;}
+  .btn-danger{background:#fbeceb;color:#a4342a;}
+
+  .status{font-size:13px;padding:9px 12px;border-radius:8px;margin-top:10px;display:none;}
+  .status.show{display:block;}
+  .status.ok{background:#eaf5ef;color:var(--good);}
+  .status.err{background:#fbeceb;color:#a4342a;}
+  .status.busy{background:#eef1f6;color:var(--teal);}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);}
+  th{color:var(--muted);font-weight:600;font-size:12px;}
+  .empty{color:var(--muted);font-size:13.5px;text-align:center;padding:24px 0;}
+
+  .setup-box{
+    background:#fff8e6;border:1px solid #f0d98c;border-radius:12px;padding:16px 18px;margin-bottom:16px;
+  }
+  .setup-box .field input{font-size:12.5px;}
+  .setup-box p{font-size:12.5px;color:#8a6a10;margin:0 0 10px;line-height:1.6;}
+  .connected-pill{
+    display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--good);
+    background:#eaf5ef;padding:4px 10px;border-radius:20px;font-weight:600;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="cafe24.html">← CAFE24 메뉴로 돌아가기</a>
+  <header>
+    <span class="eyebrow">CAFE24 · 블랙리스트 관리</span>
+    <h1>주의 고객 명단</h1>
+    <p class="sub">여기서 추가·삭제하면 연결된 구글 시트에 저장되어, 다른 컴퓨터에서도 같은 목록을 볼 수 있어요.</p>
+  </header>
+
+  <div class="setup-box" id="setupBox" style="display:none;">
+    <p><b>처음 한 번만 설정하면 돼요.</b> Google Apps Script를 "웹 앱"으로 배포한 주소(https://script.google.com/macros/... 형태)를 붙여넣어주세요. 이 컴퓨터 브라우저에 저장되어 다음부터는 자동으로 연결돼요.</p>
+    <div class="field">
+      <label>웹 앱 배포 주소</label>
+      <input type="text" id="apiUrlInput" placeholder="https://script.google.com/macros/s/xxxxx/exec">
+    </div>
+    <button class="btn btn-primary btn-small" id="btnSaveUrl">연결하기</button>
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <span class="connected-pill">● 연결됨</span>
+        <span class="btn-ghost btn btn-small" id="btnChangeUrl">연결 주소 변경</span>
+      </div>
+      <div class="row3">
+        <div class="field">
+          <label>이름</label>
+          <input type="text" id="inName" placeholder="예: 홍길동">
+        </div>
+        <div class="field">
+          <label>주소</label>
+          <input type="text" id="inAddress" placeholder="예: 서울시 ...">
+        </div>
+        <div class="field">
+          <label>휴대폰</label>
+          <input type="text" id="inPhone" placeholder="예: 010-0000-0000">
+        </div>
+      </div>
+      <button class="btn btn-primary" id="btnAdd">+ 블랙리스트에 추가</button>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <b style="font-size:14.5px;">등록된 목록 (<span id="countLabel">0</span>건)</b>
+        <span class="btn-ghost btn btn-small" id="btnRefresh">새로고침</span>
+      </div>
+      <div id="listWrap"><div class="empty">불러오는 중...</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'blacklist_api_url';
+let apiUrl = localStorage.getItem(STORAGE_KEY) || '';
+
+const setupBox = document.getElementById('setupBox');
+const mainArea = document.getElementById('mainArea');
+const apiUrlInput = document.getElementById('apiUrlInput');
+const statusEl = document.getElementById('status');
+const listWrap = document.getElementById('listWrap');
+const countLabel = document.getElementById('countLabel');
+
+function setStatus(msg, kind){
+  if(!msg){ statusEl.className = 'status'; statusEl.textContent=''; return; }
+  statusEl.className = 'status show ' + kind;
+  statusEl.textContent = msg;
+}
+
+function render(){
+  if(apiUrl){
+    setupBox.style.display = 'none';
+    mainArea.style.display = 'block';
+    loadList();
+  } else {
+    setupBox.style.display = 'block';
+    mainArea.style.display = 'none';
+  }
+}
+
+document.getElementById('btnSaveUrl').addEventListener('click', ()=>{
+  const v = apiUrlInput.value.trim();
+  if(!v.startsWith('https://script.google.com/')){
+    alert('올바른 Google Apps Script 웹 앱 주소를 입력해주세요.');
+    return;
+  }
+  apiUrl = v;
+  localStorage.setItem(STORAGE_KEY, apiUrl);
+  render();
+});
+
+document.getElementById('btnChangeUrl').addEventListener('click', ()=>{
+  if(confirm('연결 주소를 변경하시겠어요?')){
+    apiUrl = '';
+    localStorage.removeItem(STORAGE_KEY);
+    apiUrlInput.value = '';
+    render();
+  }
+});
+
+document.getElementById('btnRefresh').addEventListener('click', loadList);
+
+async function loadList(){
+  listWrap.innerHTML = '<div class="empty">불러오는 중...</div>';
+  try{
+    const res = await fetch(apiUrl, { method:'GET' });
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || '불러오기 실패');
+    renderList(data.items || []);
+  }catch(err){
+    console.error(err);
+    listWrap.innerHTML = `<div class="empty">불러오지 못했어요: ${err.message}</div>`;
+  }
+}
+
+function renderList(items){
+  countLabel.textContent = items.length;
+  if(items.length === 0){
+    listWrap.innerHTML = '<div class="empty">등록된 블랙리스트가 없어요.</div>';
+    return;
+  }
+  const rows = items.map(item => `
+    <tr>
+      <td>${escapeHtml(item.name)}</td>
+      <td>${escapeHtml(item.address)}</td>
+      <td>${escapeHtml(item.phone)}</td>
+      <td><button class="btn btn-danger btn-small" data-id="${escapeHtml(item.id)}">삭제</button></td>
+    </tr>
+  `).join('');
+  listWrap.innerHTML = `
+    <table>
+      <thead><tr><th>이름</th><th>주소</th><th>휴대폰</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+  listWrap.querySelectorAll('button[data-id]').forEach(btn=>{
+    btn.addEventListener('click', ()=> deleteItem(btn.dataset.id));
+  });
+}
+
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+document.getElementById('btnAdd').addEventListener('click', async ()=>{
+  const name = document.getElementById('inName').value.trim();
+  const address = document.getElementById('inAddress').value.trim();
+  const phone = document.getElementById('inPhone').value.trim();
+  if(!name && !address && !phone){
+    setStatus('이름, 주소, 휴대폰 중 최소 하나는 입력해주세요.', 'err');
+    return;
+  }
+  setStatus('추가하는 중...', 'busy');
+  try{
+    const res = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // Apps Script CORS 우회용
+      body: JSON.stringify({ action:'add', name, address, phone })
+    });
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || '추가 실패');
+    document.getElementById('inName').value = '';
+    document.getElementById('inAddress').value = '';
+    document.getElementById('inPhone').value = '';
+    setStatus('추가했어요.', 'ok');
+    loadList();
+  }catch(err){
+    console.error(err);
+    setStatus('추가하지 못했어요: ' + err.message, 'err');
+  }
+});
+
+async function deleteItem(id){
+  if(!confirm('이 항목을 삭제할까요?')) return;
+  try{
+    const res = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action:'delete', id })
+    });
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || '삭제 실패');
+    loadList();
+  }catch(err){
+    alert('삭제하지 못했어요: ' + err.message);
+  }
+}
+
+render();
+</script>
+</body>
+</html>
