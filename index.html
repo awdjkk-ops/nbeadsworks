@@ -3,10 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>주문 파일 변환 도구</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<title>쇼핑몰 주문 자동화</title>
 <style>
   :root{
     --ink:#22262b;
@@ -17,7 +14,6 @@
     --accent-dark:#7f2f45;
     --teal:#3a5a63;
     --line:#e4e0d8;
-    --good:#2f7d5a;
   }
   *{box-sizing:border-box;}
   body{
@@ -25,680 +21,86 @@
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Helvetica,Arial,sans-serif;
     background:var(--bg);
     color:var(--ink);
-    padding:32px 16px 64px;
+    padding:48px 16px 64px;
   }
-  .wrap{max-width:720px;margin:0 auto;}
-  header{margin-bottom:28px;}
+  .wrap{max-width:640px;margin:0 auto;}
+  header{margin-bottom:32px;text-align:center;}
   .eyebrow{
     display:inline-flex;align-items:center;gap:6px;
     font-size:12px;letter-spacing:.06em;color:var(--accent-dark);
     background:#f3e3e7;padding:4px 10px;border-radius:20px;
     font-weight:600;
   }
-  h1{font-size:25px;margin:14px 0 6px;letter-spacing:-.01em;}
+  h1{font-size:26px;margin:14px 0 6px;letter-spacing:-.01em;}
   .sub{color:var(--muted);font-size:14.5px;line-height:1.6;margin:0;}
 
-  .stage-list{
-    display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;
+  .grid{
+    display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:32px;
   }
-  .stage{
-    font-size:12.5px;padding:5px 10px;border-radius:8px;background:#eceae4;color:var(--muted);
-  }
-  .stage.active{background:var(--teal);color:#fff;font-weight:600;}
+  @media (max-width:520px){ .grid{grid-template-columns:1fr;} }
 
   .card{
     background:var(--card);
     border:1px solid var(--line);
-    border-radius:14px;
-    padding:24px;
-    margin-bottom:18px;
+    border-radius:16px;
+    padding:28px 22px;
+    text-decoration:none;
+    color:var(--ink);
+    display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;
+    transition:transform .15s, box-shadow .15s, border-color .15s;
   }
-  .step-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
-  .step-num{
-    width:26px;height:26px;border-radius:50%;
-    background:var(--teal);color:#fff;
+  .card.active:hover{
+    transform:translateY(-3px);
+    box-shadow:0 8px 20px rgba(0,0,0,.06);
+    border-color:var(--accent);
+  }
+  .card.disabled{
+    opacity:.55;
+    cursor:not-allowed;
+  }
+  .logo{
+    width:52px;height:52px;border-radius:14px;
     display:flex;align-items:center;justify-content:center;
-    font-size:13px;font-weight:700;flex:none;
+    font-size:22px;font-weight:800;color:#fff;
   }
-  .step-title{font-size:16px;font-weight:700;}
-
-  .drop{
-    border:1.5px dashed #c9c2b4;border-radius:10px;padding:28px 16px;
-    text-align:center;cursor:pointer;transition:border-color .15s, background .15s;
+  .logo.cafe24{background:var(--teal);}
+  .logo.coupang{background:#b0492f;}
+  .card-title{font-size:16px;font-weight:700;}
+  .card-desc{font-size:12.5px;color:var(--muted);line-height:1.5;}
+  .badge{
+    font-size:11px;font-weight:700;color:var(--accent-dark);
+    background:#f3e3e7;padding:2px 8px;border-radius:10px;
   }
-  .drop:hover, .drop.drag{border-color:var(--accent);background:#fbf3f5;}
-  .drop input{display:none;}
-  .drop .big{font-size:14.5px;font-weight:600;margin-bottom:4px;}
-  .drop .small{font-size:12.5px;color:var(--muted);}
+  .badge.soon{color:var(--muted);background:#eceae4;}
 
-  .filepill{
-    display:inline-flex;align-items:center;gap:8px;
-    background:#eef0ee;border-radius:8px;padding:8px 12px;
-    font-size:13.5px;margin-top:12px;
-  }
-  .filepill .x{cursor:pointer;color:var(--muted);font-weight:700;}
-
-  .status{margin-top:14px;font-size:13.5px;padding:10px 12px;border-radius:8px;display:none;line-height:1.55;}
-  .status.show{display:block;}
-  .status.ok{background:#eaf5ef;color:var(--good);}
-  .status.err{background:#fbeceb;color:#a4342a;}
-  .status.busy{background:#eef1f6;color:var(--teal);}
-
-  .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px;}
-  .stat{background:#f7f6f2;border-radius:10px;padding:12px 14px;}
-  .stat .num{font-size:20px;font-weight:800;color:var(--accent-dark);}
-  .stat .lbl{font-size:12px;color:var(--muted);margin-top:2px;}
-
-  .btn{
-    width:100%;border:none;border-radius:10px;padding:14px 16px;
-    font-size:14.5px;font-weight:700;cursor:pointer;
-    display:flex;align-items:center;justify-content:center;gap:8px;
-    background:var(--accent);color:#fff;margin-top:18px;
-    transition:opacity .15s, transform .1s;
-  }
-  .btn:disabled{opacity:.4;cursor:not-allowed;}
-  .btn:not(:disabled):hover{transform:translateY(-1px);}
-  .btn-secondary{background:var(--teal);}
-
-  .reset-link{
-    display:inline-block;margin-top:12px;font-size:12.5px;color:var(--muted);
-    text-decoration:underline;cursor:pointer;
-  }
-  footer{text-align:center;color:var(--muted);font-size:12px;margin-top:24px;line-height:1.7;}
+  footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px;}
 </style>
 </head>
 <body>
 <div class="wrap">
-
   <header>
     <span class="eyebrow">쇼핑몰 주문 자동화</span>
-    <h1>원본 주문 파일 → 자동 변환</h1>
-    <p class="sub">매일 내려받는 원본 주문 엑셀(CSV/XLSX) 하나만 올리면, 여러 결과 파일을 자동으로 만들어드려요. 파일은 브라우저 안에서만 처리되고 서버로 전송되지 않아요.</p>
-    <div class="stage-list">
-      <div class="stage active">1단계: 변환된 파일</div>
-      <div class="stage active">2단계: 택배 발송용 파일</div>
-      <div class="stage active">3단계: 라벨 스티커 파일</div>
-    </div>
+    <h1>어떤 쇼핑몰 파일을 처리할까요?</h1>
+    <p class="sub">쇼핑몰을 선택하면 해당 쇼핑몰 원본 파일에 맞는 도구로 이동해요.</p>
   </header>
 
-  <div class="card">
-    <div class="step-head">
-      <div class="step-num">1</div>
-      <div class="step-title">원본 주문 파일 업로드</div>
-    </div>
+  <div class="grid">
+    <a href="cafe24.html" class="card active">
+      <div class="logo cafe24">24</div>
+      <div class="card-title">CAFE24</div>
+      <div class="card-desc">변환된 파일 · 택배 발송용 · 라벨 스티커 자동 생성</div>
+      <span class="badge">사용 가능</span>
+    </a>
 
-    <div class="drop" id="dropzone">
-      <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
-      <div class="big">클릭하거나 파일을 끌어다 놓으세요</div>
-      <div class="small">.csv 또는 .xlsx — 쇼핑몰에서 내려받은 원본 그대로</div>
-    </div>
-
-    <div id="filepillWrap"></div>
-    <div class="status" id="status"></div>
-
-    <div class="summary" id="summary" style="display:none;">
-      <div class="stat"><div class="num" id="statLines">0</div><div class="lbl">원본 줄 수</div></div>
-      <div class="stat"><div class="num" id="statRecipients">0</div><div class="lbl">수령인 구분 행</div></div>
-      <div class="stat"><div class="num" id="statOrders">0</div><div class="lbl">택배 건수(주문 수)</div></div>
-      <div class="stat"><div class="num" id="statLabelItems">0</div><div class="lbl">라벨 항목 수</div></div>
-      <div class="stat"><div class="num" id="statLabelPages">0</div><div class="lbl">라벨 페이지 수</div></div>
-    </div>
+    <a href="coupang.html" class="card active">
+      <div class="logo coupang">C</div>
+      <div class="card-title">쿠팡</div>
+      <div class="card-desc">준비 중이에요</div>
+      <span class="badge soon">준비 중</span>
+    </a>
   </div>
 
-  <div class="card">
-    <div class="step-head">
-      <div class="step-num">2</div>
-      <div class="step-title">결과 파일 다운로드</div>
-    </div>
-    <button class="btn" id="btnConvert" disabled>📄 1단계 · 변환된 파일 다운로드</button>
-    <button class="btn btn-secondary" id="btnCourier" disabled>📦 2단계 · 택배 발송용 파일 다운로드</button>
-    <button class="btn btn-secondary" id="btnLabel" disabled>🏷️ 3단계 · 라벨 스티커 파일 다운로드</button>
-    <span class="reset-link" id="resetLink">다른 파일로 다시 시작</span>
-  </div>
-
-  <footer>
-    1단계 — 수령인+주소가 바뀔 때마다 구분 행 삽입 · "수량" 칸은 "바로 앞 줄과 같은 주문인지" 표시<br>
-    2단계 — 주문 1건당 1행으로 정리 · 동명이인(이름 같고 주소 다름)은 이름 칸을 <span style="color:#2a7fb0;font-weight:700;">하늘색</span>, 이름+주소가 같으면 <span style="color:#b58900;font-weight:700;">노란색</span>으로 표시<br>
-    3단계 — 폼텍 3145 라벨 양식(5열×29행, 페이지당 145칸) · 수령인이 바뀌면 이름 라벨(기본 <span style="color:#c2185b;font-weight:700;">분홍</span>), 이어서 상품명+옵션 라벨(옵션 없으면 상품명만 병합 표시) · 동명이인은 <span style="color:#2a7fb0;font-weight:700;">하늘색</span>, 같은 사람 여러 주문은 <span style="color:#b58900;font-weight:700;">노란색</span> · 원본 양이 늘면 페이지가 자동으로 늘어남
-  </footer>
-
+  <footer>파일은 이 브라우저 안에서만 처리되고 서버로 전송되지 않아요.</footer>
 </div>
-
-<script>
-const REQUIRED_COLS = [
-  '주문번호','발주일','주문상품명','상품번호','옵션','자체품목코드','결제수단','결제업체','결제정보','판매가',
-  '수령인','우편번호','주소','수령지전화','전화번호','핸드폰','비고',
-  '주문자','주문자우편번호','주문자주소','주문자전화번호','주문자핸드폰','옵션추가 가격','배송비 정보'
-];
-
-// 변환된 파일의 컬럼 순서 (원본에서 "쇼핑몰","쇼핑몰번호" 제외, "수량" 위치는 계산값으로 대체)
-const OUTPUT_HEADERS = [
-  '주문번호','발주일','주문상품명','상품번호','옵션','자체품목코드','결제수단','결제업체','결제정보','판매가',
-  '수량','수령인','우편번호','주소','수령지전화','전화번호','핸드폰','비고',
-  '주문자','주문자우편번호','주문자주소','주문자전화번호','주문자핸드폰','옵션추가 가격','배송비 정보'
-];
-
-let parsedRows = null;
-let converted = null; // {header, rows}
-let courierRows = null; // 택배 발송용 (2단계)
-let labelSeq = null; // 라벨 시퀀스 (3단계)
-
-const dropzone = document.getElementById('dropzone');
-const fileInput = document.getElementById('fileInput');
-const statusEl = document.getElementById('status');
-const filepillWrap = document.getElementById('filepillWrap');
-const summaryEl = document.getElementById('summary');
-const btnConvert = document.getElementById('btnConvert');
-const btnCourier = document.getElementById('btnCourier');
-const btnLabel = document.getElementById('btnLabel');
-const resetLink = document.getElementById('resetLink');
-
-dropzone.addEventListener('click', ()=> fileInput.click());
-dropzone.addEventListener('dragover', e=>{e.preventDefault(); dropzone.classList.add('drag');});
-dropzone.addEventListener('dragleave', ()=> dropzone.classList.remove('drag'));
-dropzone.addEventListener('drop', e=>{
-  e.preventDefault();
-  dropzone.classList.remove('drag');
-  if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-});
-fileInput.addEventListener('change', e=>{
-  if(e.target.files.length) handleFile(e.target.files[0]);
-});
-resetLink.addEventListener('click', resetAll);
-
-function resetAll(){
-  parsedRows = null; converted = null; courierRows = null; labelSeq = null;
-  fileInput.value = '';
-  filepillWrap.innerHTML = '';
-  summaryEl.style.display = 'none';
-  setStatus('', '');
-  btnConvert.disabled = true;
-  btnCourier.disabled = true;
-  btnLabel.disabled = true;
-}
-
-function setStatus(msg, kind){
-  if(!msg){ statusEl.className='status'; statusEl.textContent=''; return; }
-  statusEl.className = 'status show ' + kind;
-  statusEl.textContent = msg;
-}
-
-function stripBOM(s){ return typeof s === 'string' ? s.replace(/^\uFEFF/,'').trim() : s; }
-
-async function handleFile(file){
-  filepillWrap.innerHTML = `<div class="filepill">📄 ${file.name} <span class="x" title="제거">✕</span></div>`;
-  filepillWrap.querySelector('.x').addEventListener('click', resetAll);
-  setStatus('파일을 읽는 중...', 'busy');
-  btnConvert.disabled = true;
-  btnCourier.disabled = true;
-  btnLabel.disabled = true;
-  summaryEl.style.display = 'none';
-
-  try{
-    const ext = file.name.split('.').pop().toLowerCase();
-    let rows = ext === 'csv' ? await parseCSV(file) : await parseXLSX(file);
-
-    rows = rows.map(r=>{
-      const clean = {};
-      Object.keys(r).forEach(k=>{ clean[stripBOM(k)] = r[k]; });
-      return clean;
-    }).filter(r => Object.values(r).some(v => v !== undefined && v !== null && String(v).trim() !== ''));
-
-    const headerKeys = rows.length ? Object.keys(rows[0]) : [];
-    const missing = REQUIRED_COLS.filter(c => !headerKeys.includes(c));
-    if(missing.length){
-      setStatus(`원본 파일에서 다음 컬럼을 찾을 수 없어요: ${missing.join(', ')}`, 'err');
-      return;
-    }
-
-    parsedRows = rows;
-    converted = buildConverted(rows);
-    courierRows = buildCourierRows(rows);
-    labelSeq = buildLabelSequence(rows);
-
-    const sepCount = converted.rows.filter(r => r.__isSeparator).length;
-    document.getElementById('statLines').textContent = rows.length.toLocaleString();
-    document.getElementById('statRecipients').textContent = sepCount.toLocaleString();
-    document.getElementById('statOrders').textContent = courierRows.length.toLocaleString();
-    document.getElementById('statLabelItems').textContent = labelSeq.length.toLocaleString();
-    document.getElementById('statLabelPages').textContent = Math.max(1, Math.ceil(labelSeq.length/145));
-    summaryEl.style.display = 'grid';
-
-    setStatus(`처리 완료! 원본 ${rows.length.toLocaleString()}줄 → 주문 ${courierRows.length.toLocaleString()}건, 라벨 ${Math.ceil(labelSeq.length/145)}페이지. 아래에서 다운로드하세요.`, 'ok');
-    btnConvert.disabled = false;
-    btnCourier.disabled = false;
-    btnLabel.disabled = false;
-  }catch(err){
-    console.error(err);
-    setStatus('파일을 읽는 중 오류가 발생했어요: ' + err.message, 'err');
-  }
-}
-
-function parseCSV(file){
-  return new Promise((resolve, reject)=>{
-    Papa.parse(file, {
-      header:true, skipEmptyLines:true, encoding:'UTF-8',
-      complete: res => resolve(res.data),
-      error: err => reject(err)
-    });
-  });
-}
-
-async function parseXLSX(file){
-  const buf = await file.arrayBuffer();
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buf);
-  const ws = wb.worksheets[0];
-  const headers = [];
-  const rows = [];
-  ws.eachRow((row, rowNumber)=>{
-    const vals = row.values;
-    if(rowNumber === 1){
-      for(let c=1;c<vals.length;c++) headers[c-1] = stripBOM(String(vals[c] ?? '').trim());
-    } else {
-      const obj = {};
-      for(let c=1;c<vals.length;c++){
-        let v = vals[c];
-        if(v && v.text !== undefined) v = v.text;
-        if(v instanceof Date) v = v.toISOString().slice(0,10);
-        obj[headers[c-1]] = v === undefined || v === null ? '' : v;
-      }
-      rows.push(obj);
-    }
-  });
-  return rows;
-}
-
-function rawVal(r, key){
-  const v = r[key];
-  return (v === undefined || v === null) ? '' : String(v);
-}
-
-// 순수 숫자(정수/소수)로만 이루어진 문자열은 숫자로 변환 (엑셀에 값으로 붙여넣었을 때와 동일한 동작 재현)
-function coerce(raw){
-  const s = rawVal({v:raw}, 'v');
-  const t = s.trim();
-  if(t === '') return null;
-  if(/^-?\d+$/.test(t)) return parseInt(t, 10);
-  if(/^-?\d+\.\d+$/.test(t)) return parseFloat(t);
-  return raw;
-}
-
-function parseDateValue(raw){
-  const s = rawVal({v:raw}, 'v').trim();
-  const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if(m) return new Date(Date.UTC(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3])));
-  return s || null;
-}
-
-// ---- 원본 라인아이템 → 변환된 파일 행 배열 ----
-function buildConverted(rows){
-  const header = OUTPUT_HEADERS.slice();
-  const outRows = [];
-  let prevRecipient = null;
-  let prevGroupKey = null;
-  let prevOrder = null;
-  let firstTransitionDone = false;
-
-  rows.forEach(r=>{
-    const recipient = rawVal(r,'수령인').trim();
-    const address = rawVal(r,'주소').trim();
-    const order = rawVal(r,'주문번호').trim();
-    // 동명이인이 있을 수 있어 이름만으로는 구분이 안 됨 → 이름+주소를 함께 기준으로 삼음
-    const groupKey = recipient + '||' + address;
-
-    if(groupKey !== prevGroupKey){
-      if(!firstTransitionDone){
-        // 첫 번째 수령인은 헤더 행의 "주문상품명" 자리에 표기 (원본 파일 관례 그대로 재현)
-        header[2] = recipient;
-        firstTransitionDone = true;
-      } else {
-        outRows.push({ __isSeparator:true, values:[null,null,recipient,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null] });
-      }
-      prevGroupKey = groupKey;
-      prevRecipient = recipient;
-    }
-
-    const sameOrderAsPrev = (order === prevOrder);
-
-    const values = [
-      order,                                   // 주문번호 (항상 문자열 그대로)
-      parseDateValue(r['발주일']),               // 발주일
-      rawVal(r,'주문상품명'),                     // 주문상품명
-      coerce(r['상품번호']),                      // 상품번호
-      rawVal(r,'옵션') || null,                   // 옵션
-      coerce(r['자체품목코드']),                   // 자체품목코드
-      rawVal(r,'결제수단') || null,               // 결제수단
-      rawVal(r,'결제업체') || null,               // 결제업체
-      rawVal(r,'결제정보') || null,               // 결제정보
-      coerce(r['판매가']),                        // 판매가
-      sameOrderAsPrev,                            // 수량 → 실제로는 "이전 줄과 같은 주문인지" 플래그
-      recipient,                                   // 수령인
-      coerce(r['우편번호']),                       // 우편번호
-      rawVal(r,'주소') || null,                    // 주소
-      rawVal(r,'수령지전화') || null,               // 수령지전화
-      rawVal(r,'전화번호') || null,                 // 전화번호
-      rawVal(r,'핸드폰') || null,                   // 핸드폰
-      rawVal(r,'비고') || null,                     // 비고 (원본 그대로, 공백 유지)
-      rawVal(r,'주문자') || null,                   // 주문자
-      coerce(r['주문자우편번호']),                   // 주문자우편번호
-      rawVal(r,'주문자주소') || null,                // 주문자주소
-      rawVal(r,'주문자전화번호') || null,            // 주문자전화번호
-      rawVal(r,'주문자핸드폰') || null,              // 주문자핸드폰
-      coerce(r['옵션추가 가격']),                    // 옵션추가 가격
-      rawVal(r,'배송비 정보') || null                // 배송비 정보
-    ];
-
-    outRows.push({ __isSeparator:false, values });
-    prevOrder = order;
-  });
-
-  return { header, rows: outRows };
-}
-
-function todayTag(){
-  const d = new Date();
-  const pad = n => String(n).padStart(2,'0');
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
-}
-
-// ---- 2단계: 택배 발송용 (주문 1건 = 1행) ----
-const COURIER_HEADERS = [
-  '받는분성명','받는분우편번호','받는분주소(전체, 분할)','받는분전화번호1(P)','받는분전화번호2(Q)',
-  '상품명(옵션명)','수량','자동합계\n총 수량',
-  '사용안함\n주문번호 판매처등활용시\n씨엔플러스에만노출',
-  '배송메세지1®','운임구분','기본운임','보내는분성명','보내는분전화번호1','보내는분전화번호2','보내는분주소(전체,분할)'
-];
-const SENDER = {
-  name: '엔비즈', tel1: '031-915-5123', tel2: '031-915-5123',
-  addr: '서울 서초구 양재동 230, 롯데택배 양재대리점1 엔비즈'
-};
-
-function trimVal(r, key){
-  const v = r[key];
-  return (v === undefined || v === null) ? '' : String(v).trim();
-}
-function normalizeZip(z){
-  const s = String(z ?? '').trim();
-  return /^\d+$/.test(s) ? String(parseInt(s, 10)) : s;
-}
-
-function buildCourierRows(rows){
-  const seen = new Set();
-  const out = [];
-  rows.forEach(r=>{
-    const recipient = trimVal(r,'수령인');
-    const zip = normalizeZip(trimVal(r,'우편번호'));
-    const address = trimVal(r,'주소');
-    const tel1 = trimVal(r,'전화번호');
-    const tel2 = trimVal(r,'핸드폰');
-    const orderNo = trimVal(r,'주문번호');
-    const note = rawVal(r,'비고').trim() === '' ? '0' : rawVal(r,'비고');
-    const key = [recipient, zip, address, tel1, tel2, orderNo].join('|');
-    if(seen.has(key)) return;
-    seen.add(key);
-    out.push({ recipient, zip, address, tel1, tel2, orderNo, note });
-  });
-  return out;
-}
-
-// 동명이인(이름 같고 주소 다름) → 이름 칸 하늘색 / 이름+주소 같은 사람(진짜 중복) → 이름+주소 칸 노란색
-function computeHighlights(rows){
-  const byName = new Map();
-  rows.forEach((r, i)=>{
-    if(!byName.has(r.recipient)) byName.set(r.recipient, []);
-    byName.get(r.recipient).push(i);
-  });
-
-  const blueRows = new Set();
-  const yellowRows = new Set();
-
-  byName.forEach((idxs)=>{
-    if(idxs.length < 2) return;
-    const byAddr = new Map();
-    idxs.forEach(i=>{
-      const addr = rows[i].address;
-      if(!byAddr.has(addr)) byAddr.set(addr, []);
-      byAddr.get(addr).push(i);
-    });
-    byAddr.forEach(addrIdxs=>{
-      if(addrIdxs.length >= 2) addrIdxs.forEach(i => yellowRows.add(i));
-    });
-    if(byAddr.size > 1){
-      idxs.forEach(i=>{ if(!yellowRows.has(i)) blueRows.add(i); });
-    }
-  });
-
-  return { blueRows, yellowRows };
-}
-
-async function downloadWorkbook(wb, filename, patchDefaultFont){
-  let buf = await wb.xlsx.writeBuffer();
-  if(patchDefaultFont){
-    buf = await patchWorkbookDefaultFont(buf, patchDefaultFont);
-  }
-  const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(()=> URL.revokeObjectURL(url), 2000);
-}
-
-// 엑셀 파일의 "기본(Normal 스타일) 글꼴"을 바꿔치기.
-// 열 너비(문자단위)는 이 기본 글꼴을 기준으로 픽셀/인쇄크기가 계산되기 때문에,
-// 참조 파일과 같은 글꼴(예: 돋움 11pt)로 맞춰야 화면에 보이는 "열 너비" 숫자와 실제 인쇄 크기가 정확히 일치함.
-async function patchWorkbookDefaultFont(buf, fontXml){
-  const zip = await JSZip.loadAsync(buf);
-  const path = 'xl/styles.xml';
-  let xml = await zip.file(path).async('string');
-  xml = xml.replace(
-    /(<fonts count="\d+"[^>]*>)<font>.*?<\/font>/,
-    (m, opening) => `${opening}${fontXml}`
-  );
-  zip.file(path, xml);
-  return await zip.generateAsync({type:'uint8array'});
-}
-const LABEL_DEFAULT_FONT_XML = '<font><sz val="11"/><name val="돋움"/><family val="3"/><charset val="129"/></font>';
-
-// ---- 3단계: 라벨 스티커 (폼텍 3145 양식) ----
-// 수령인+주소가 바뀔 때마다 이름 항목을 넣고, 그 뒤에 상품명+옵션 항목을 순서대로 나열
-function buildLabelSequence(rows){
-  const seq = [];
-  let prevKey = null;
-  rows.forEach(r=>{
-    const name = trimVal(r,'수령인');
-    const addr = trimVal(r,'주소');
-    const key = name + '||' + addr;
-    if(key !== prevKey){
-      seq.push({ type:'NAME', text:name, groupKey:key });
-      prevKey = key;
-    }
-    seq.push({ type:'PROD', line1: trimVal(r,'주문상품명'), line2: trimVal(r,'옵션') });
-  });
-  return seq;
-}
-
-// 이름 칸 색상 판단: 기본 분홍 / 동명이인(이름 같고 주소 다름)은 하늘색 / 같은 사람 여러 주문(이름+주소 같고 주문번호 여러개)은 노란색
-function computeNameColors(rows){
-  const byNameAddr = new Map(); // "이름||주소" -> Set(주문번호)
-  const byName = new Map();     // 이름 -> Set(주소)
-  rows.forEach(r=>{
-    const name = trimVal(r,'수령인');
-    const addr = trimVal(r,'주소');
-    const orderNo = trimVal(r,'주문번호');
-    const key = name + '||' + addr;
-    if(!byNameAddr.has(key)) byNameAddr.set(key, new Set());
-    byNameAddr.get(key).add(orderNo);
-    if(!byName.has(name)) byName.set(name, new Set());
-    byName.get(name).add(addr);
-  });
-  const yellowKeys = new Set();
-  byNameAddr.forEach((orderSet, key)=>{ if(orderSet.size >= 2) yellowKeys.add(key); });
-  const blueNames = new Set();
-  byName.forEach((addrSet, name)=>{ if(addrSet.size >= 2) blueNames.add(name); });
-  return { yellowKeys, blueNames };
-}
-
-function nameSlotColor(item, colorInfo){
-  if(colorInfo.yellowKeys.has(item.groupKey)) return 'FFFFFF00'; // 같은 사람 여러 주문
-  if(colorInfo.blueNames.has(item.text)) return 'FFADD8E6';       // 동명이인
-  return 'FFFFC0CB'; // 기본 분홍
-}
-
-const LABEL_COL_WIDTHS_FULL = [1.33203125,4.6640625,2.44140625,3.44140625,0.88671875,2.6640625,1.33203125,4.6640625,2.44140625,3.44140625,0.88671875,2.109375,1.33203125,4.6640625,2.44140625,3.44140625,0.88671875,2.6640625,1.33203125,4.6640625,2.44140625,3.44140625,0.88671875,2.33203125,1.33203125,4.6640625,2.44140625,3.44140625,0.88671875,1.33203125]; // A~AD (30열)
-const LABEL_ROW_HEIGHTS_FULL = [2.45,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,8.25,8.25,9.0,9.0,7.5,9.0,9.0,8.25,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.75,7.5,9.0,9.75,7.5,9.0,9.0,7.5,9.0,9.0,7.5,8.25,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,8.25,7.5,9.0,9.0,9.0]; // 1~91행, 참조 파일과 동일 (89~91행은 시트 기본 행높이 9pt)
-const LABEL_ANCHOR_OFFSETS = [0, 6, 12, 18, 24]; // 5칸(라벨) + 1칸(간격) 반복
-const LABEL_FONT_NAME = '돋움';
-const LABEL_OPTION_COLOR = 'FF4F81BD';
-const LABEL_WEBSITE_FILL = 'FFBFBFBF';
-const LABEL_PER_PAGE = 145; // 5열 x 29행
-
-function buildLabelSheet(ws, pageItems, colorInfo){
-  LABEL_COL_WIDTHS_FULL.forEach((w,i)=>{ ws.getColumn(i+1).width = w; });
-  LABEL_ROW_HEIGHTS_FULL.forEach((h,i)=>{ ws.getRow(i+1).height = h; });
-
-  ws.pageSetup = {
-    paperSize:9, orientation:'portrait',
-    margins:{left:0.8267716535433072, right:0.19685039370078741, top:0.6692913385826772, bottom:0.23622047244094491, header:0.15748031496062992, footer:0.15748031496062992},
-    printArea:'A1:AD91'
-  };
-
-  for(let col=0; col<5; col++){
-    const anchor = 1 + LABEL_ANCHOR_OFFSETS[col];
-    for(let g=0; g<29; g++){
-      const r1 = 2+3*g, r2 = 3+3*g, r3 = 4+3*g;
-
-      const item = pageItems[col*29 + g];
-      if(!item) continue;
-
-      const baseFont = {name:LABEL_FONT_NAME, size:6, family:3, charset:129};
-      const centerTop = {horizontal:'center', vertical:'top', wrapText:true};
-
-      if(item.type === 'NAME'){
-        ws.mergeCells(r1, anchor, r2, anchor+4);
-        const c1 = ws.getCell(r1, anchor);
-        c1.value = item.text;
-        c1.font = {...baseFont, size:9, bold:true};
-        c1.alignment = centerTop;
-        c1.fill = {type:'pattern', pattern:'solid', fgColor:{argb: nameSlotColor(item, colorInfo)}};
-      } else if(!item.line2){
-        // 옵션이 없으면 상품명 칸만 크게 보이도록 두 줄을 병합 (0 표기 제거)
-        ws.mergeCells(r1, anchor, r2, anchor+4);
-        const c1 = ws.getCell(r1, anchor);
-        c1.value = item.line1;
-        c1.font = baseFont;
-        c1.alignment = centerTop;
-      } else {
-        ws.mergeCells(r1, anchor, r1, anchor+4);
-        ws.mergeCells(r2, anchor, r2, anchor+4);
-        const c1 = ws.getCell(r1, anchor);
-        c1.value = item.line1;
-        c1.font = baseFont;
-        c1.alignment = centerTop;
-
-        const c2 = ws.getCell(r2, anchor);
-        c2.value = item.line2;
-        c2.font = {...baseFont, bold:true, color:{argb:LABEL_OPTION_COLOR}};
-        c2.alignment = centerTop;
-      }
-
-      ws.mergeCells(r3, anchor, r3, anchor+4);
-      const c3 = ws.getCell(r3, anchor);
-      c3.value = 'www.beadsmaker.com';
-      c3.font = {...baseFont, bold:true};
-      c3.alignment = centerTop;
-      c3.fill = {type:'pattern', pattern:'solid', fgColor:{argb:LABEL_WEBSITE_FILL}};
-    }
-  }
-}
-
-btnConvert.addEventListener('click', async ()=>{
-  if(!converted) return;
-  btnConvert.disabled = true;
-  try{
-    const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('변환된 파일');
-    ws.addRow(converted.header);
-    converted.rows.forEach(row => ws.addRow(row.values));
-
-    // 발주일 컬럼(2번째) 날짜 서식
-    ws.getColumn(2).numFmt = 'yyyy-mm-dd';
-    ws.columns.forEach((col, i)=>{ col.width = 16; });
-
-    await downloadWorkbook(wb, `변환된파일_${todayTag()}.xlsx`);
-  }catch(err){
-    console.error(err);
-    alert('파일 생성 중 오류: ' + err.message);
-  }finally{
-    btnConvert.disabled = false;
-  }
-});
-
-btnCourier.addEventListener('click', async ()=>{
-  if(!courierRows) return;
-  btnCourier.disabled = true;
-  try{
-    const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('택배발송');
-    ws.addRow(COURIER_HEADERS);
-    ws.getRow(1).font = {bold:true};
-    ws.getRow(1).alignment = {wrapText:true, vertical:'middle', horizontal:'center'};
-    ws.getRow(1).height = 32;
-
-    courierRows.forEach(cr=>{
-      ws.addRow([
-        cr.recipient, cr.zip, cr.address, cr.tel1, cr.tel2,
-        cr.orderNo, 1, null, null, cr.note,
-        '신용', null, SENDER.name, SENDER.tel1, SENDER.tel2, SENDER.addr
-      ]);
-    });
-
-    ws.columns.forEach((col, i)=>{ col.width = [22,10,42,16,16,20,7,10,14,20,10,10,12,16,16,42][i] || 16; });
-
-    const { blueRows, yellowRows } = computeHighlights(courierRows);
-    const skyBlue = {type:'pattern', pattern:'solid', fgColor:{argb:'FFADD8E6'}};
-    const yellow = {type:'pattern', pattern:'solid', fgColor:{argb:'FFFFFF00'}};
-
-    courierRows.forEach((cr, i)=>{
-      const sheetRow = i + 2;
-      if(yellowRows.has(i)){
-        ws.getCell(sheetRow, 1).fill = yellow; // 받는분성명
-        ws.getCell(sheetRow, 3).fill = yellow; // 받는분주소
-      } else if(blueRows.has(i)){
-        ws.getCell(sheetRow, 1).fill = skyBlue; // 받는분성명
-      }
-    });
-
-    await downloadWorkbook(wb, `택배발송_${todayTag()}.xlsx`);
-  }catch(err){
-    console.error(err);
-    alert('파일 생성 중 오류: ' + err.message);
-  }finally{
-    btnCourier.disabled = false;
-  }
-});
-
-btnLabel.addEventListener('click', async ()=>{
-  if(!labelSeq || !parsedRows) return;
-  btnLabel.disabled = true;
-  try{
-    const colorInfo = computeNameColors(parsedRows);
-    const wb = new ExcelJS.Workbook();
-    const pageCount = Math.max(1, Math.ceil(labelSeq.length / LABEL_PER_PAGE));
-    for(let p=0; p<pageCount; p++){
-      const ws = wb.addWorksheet(`--${p+1}--`);
-      const pageItems = labelSeq.slice(p*LABEL_PER_PAGE, (p+1)*LABEL_PER_PAGE);
-      buildLabelSheet(ws, pageItems, colorInfo);
-    }
-    await downloadWorkbook(wb, `라벨_${todayTag()}.xlsx`, LABEL_DEFAULT_FONT_XML);
-  }catch(err){
-    console.error(err);
-    alert('라벨 파일 생성 중 오류: ' + err.message);
-  }finally{
-    btnLabel.disabled = false;
-  }
-});
-</script>
 </body>
 </html>
