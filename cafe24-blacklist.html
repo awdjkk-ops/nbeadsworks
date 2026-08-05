@@ -193,11 +193,28 @@ document.getElementById('btnChangeUrl').addEventListener('click', ()=>{
 
 document.getElementById('btnRefresh').addEventListener('click', loadList);
 
+function jsonp(url, params){
+  return new Promise((resolve, reject)=>{
+    const cbName = 'cb_' + Date.now() + '_' + Math.floor(Math.random()*100000);
+    const timer = setTimeout(()=>{ cleanup(); reject(new Error('응답 시간 초과')); }, 15000);
+    function cleanup(){
+      clearTimeout(timer);
+      delete window[cbName];
+      if(script.parentNode) script.parentNode.removeChild(script);
+    }
+    window[cbName] = (data)=>{ cleanup(); resolve(data); };
+    const qs = new URLSearchParams({ ...params, callback: cbName }).toString();
+    const script = document.createElement('script');
+    script.src = url + (url.includes('?') ? '&' : '?') + qs;
+    script.onerror = ()=>{ cleanup(); reject(new Error('네트워크 오류 (주소가 올바른지 확인해주세요)')); };
+    document.body.appendChild(script);
+  });
+}
+
 async function loadList(){
   listWrap.innerHTML = '<div class="empty">불러오는 중...</div>';
   try{
-    const res = await fetch(apiUrl, { method:'GET' });
-    const data = await res.json();
+    const data = await jsonp(apiUrl, { action:'list' });
     if(!data.ok) throw new Error(data.error || '불러오기 실패');
     renderList(data.items || []);
   }catch(err){
@@ -245,12 +262,7 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
   }
   setStatus('추가하는 중...', 'busy');
   try{
-    const res = await fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // Apps Script CORS 우회용
-      body: JSON.stringify({ action:'add', name, address, phone })
-    });
-    const data = await res.json();
+    const data = await jsonp(apiUrl, { action:'add', name, address, phone });
     if(!data.ok) throw new Error(data.error || '추가 실패');
     document.getElementById('inName').value = '';
     document.getElementById('inAddress').value = '';
@@ -266,12 +278,7 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
 async function deleteItem(id){
   if(!confirm('이 항목을 삭제할까요?')) return;
   try{
-    const res = await fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action:'delete', id })
-    });
-    const data = await res.json();
+    const data = await jsonp(apiUrl, { action:'delete', id });
     if(!data.ok) throw new Error(data.error || '삭제 실패');
     loadList();
   }catch(err){
