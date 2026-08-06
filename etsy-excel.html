@@ -393,7 +393,7 @@ function buildLabelSheet(ws, pageItems, colorInfo){
         ws.mergeCells(r1, anchor, r2, anchor+4);
         const c1 = ws.getCell(r1, anchor);
         c1.value = item.text;
-        c1.font = baseFont;
+        c1.font = {...baseFont, bold:true};
         c1.alignment = centerTop;
         c1.fill = {type:'pattern', pattern:'solid', fgColor:{argb: nameSlotColor(item, colorInfo)}};
       } else if(!item.line2){
