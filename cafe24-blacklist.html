@@ -77,6 +77,20 @@
 
   table{width:100%;border-collapse:collapse;font-size:13.5px;}
   th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);}
+  .btn-small{padding:6px 12px;font-size:12.5px;white-space:nowrap;}
+  td .level-badge{white-space:nowrap;display:inline-block;}
+  td.reason-cell{position:relative;max-width:160px;}
+  .reason-truncate{
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;
+  }
+  .reason-full{
+    display:none;position:absolute;left:0;top:calc(100% + 2px);z-index:30;
+    background:#fff;border:1px solid var(--line);border-radius:8px;
+    padding:10px 12px;box-shadow:0 6px 16px rgba(0,0,0,.14);
+    white-space:normal;width:260px;font-size:12.5px;line-height:1.55;color:var(--ink);
+  }
+  td.reason-cell:hover .reason-full{display:block;}
+  td.reason-cell:hover .reason-truncate{visibility:hidden;}
   th{color:var(--muted);font-weight:600;font-size:12px;}
   .empty{color:var(--muted);font-size:13.5px;text-align:center;padding:24px 0;}
 
@@ -246,15 +260,19 @@ function renderList(items){
   const rows = items.map(item => {
     const isWatch = item.level === '경계대상';
     const badge = isWatch
-      ? '<span style="font-size:11px;font-weight:700;color:#1f4e9c;background:#e3ebfb;padding:2px 8px;border-radius:10px;">경계대상</span>'
-      : '<span style="font-size:11px;font-weight:700;color:#a4342a;background:#fbeceb;padding:2px 8px;border-radius:10px;">블랙리스트</span>';
+      ? '<span class="level-badge" style="font-size:11px;font-weight:700;color:#1f4e9c;background:#e3ebfb;padding:2px 8px;border-radius:10px;">경계대상</span>'
+      : '<span class="level-badge" style="font-size:11px;font-weight:700;color:#a4342a;background:#fbeceb;padding:2px 8px;border-radius:10px;">블랙리스트</span>';
+    const reasonText = escapeHtml(item.reason);
     return `
     <tr>
       <td>${badge}</td>
       <td>${escapeHtml(item.name)}</td>
       <td>${escapeHtml(item.address)}</td>
       <td>${escapeHtml(item.phone)}</td>
-      <td style="max-width:180px;white-space:normal;">${escapeHtml(item.reason)}</td>
+      <td class="reason-cell">
+        <span class="reason-truncate">${reasonText}</span>
+        <div class="reason-full">${reasonText}</div>
+      </td>
       <td><button class="btn btn-danger btn-small" data-id="${escapeHtml(item.id)}">삭제</button></td>
     </tr>
   `;
