@@ -263,12 +263,13 @@ function renderList(items){
       ? '<span class="level-badge" style="font-size:11px;font-weight:700;color:#1f4e9c;background:#e3ebfb;padding:2px 8px;border-radius:10px;">경계대상</span>'
       : '<span class="level-badge" style="font-size:11px;font-weight:700;color:#a4342a;background:#fbeceb;padding:2px 8px;border-radius:10px;">블랙리스트</span>';
     const reasonText = escapeHtml(item.reason);
+    const nameStyle = item.name && item.name.length > 10 ? '' : 'white-space:nowrap;';
     return `
     <tr>
       <td>${badge}</td>
-      <td>${escapeHtml(item.name)}</td>
+      <td style="${nameStyle}">${escapeHtml(item.name)}</td>
       <td>${escapeHtml(item.address)}</td>
-      <td>${escapeHtml(item.phone)}</td>
+      <td style="white-space:nowrap;">${escapeHtml(item.phone)}</td>
       <td class="reason-cell">
         <span class="reason-truncate">${reasonText}</span>
         <div class="reason-full">${reasonText}</div>
