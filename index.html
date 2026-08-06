@@ -100,7 +100,28 @@
     </a>
   </div>
 
-  <footer>파일은 이 브라우저 안에서만 처리되고 서버로 전송되지 않아요.</footer>
+  <footer>
+    파일은 이 브라우저 안에서만 처리되고 서버로 전송되지 않아요.<br>
+    <span id="lastUpdated" style="opacity:.8;">최근 업데이트 확인 중...</span>
+  </footer>
 </div>
+<script>
+(async ()=>{
+  const el = document.getElementById('lastUpdated');
+  try{
+    const res = await fetch('https://api.github.com/repos/awdjkk-ops/nbeadsworks/commits?per_page=1');
+    if(!res.ok) throw new Error('조회 실패');
+    const data = await res.json();
+    const dateStr = data[0]?.commit?.author?.date;
+    if(!dateStr) throw new Error('날짜 없음');
+    const d = new Date(dateStr);
+    const pad = n => String(n).padStart(2,'0');
+    const formatted = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    el.textContent = `최근 업데이트: ${formatted}`;
+  }catch(err){
+    el.textContent = '';
+  }
+})();
+</script>
 </body>
 </html>
