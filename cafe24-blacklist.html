@@ -129,7 +129,20 @@
           <input type="text" id="inPhone" placeholder="예: 010-0000-0000">
         </div>
       </div>
-      <button class="btn btn-primary" id="btnAdd">+ 블랙리스트에 추가</button>
+      <div class="row3">
+        <div class="field">
+          <label>등급</label>
+          <select id="inLevel" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit;">
+            <option value="블랙리스트">블랙리스트</option>
+            <option value="경계대상">경계대상</option>
+          </select>
+        </div>
+        <div class="field" style="grid-column:span 2;">
+          <label>사유</label>
+          <input type="text" id="inReason" placeholder="예: 반품 다발, 인수 거부 이력 등">
+        </div>
+      </div>
+      <button class="btn btn-primary" id="btnAdd">+ 추가</button>
       <div class="status" id="status"></div>
     </div>
 
@@ -142,6 +155,7 @@
     </div>
   </div>
 </div>
+
 
 <script>
 const STORAGE_KEY = 'blacklist_api_url';
@@ -226,20 +240,28 @@ async function loadList(){
 function renderList(items){
   countLabel.textContent = items.length;
   if(items.length === 0){
-    listWrap.innerHTML = '<div class="empty">등록된 블랙리스트가 없어요.</div>';
+    listWrap.innerHTML = '<div class="empty">등록된 목록이 없어요.</div>';
     return;
   }
-  const rows = items.map(item => `
+  const rows = items.map(item => {
+    const isWatch = item.level === '경계대상';
+    const badge = isWatch
+      ? '<span style="font-size:11px;font-weight:700;color:#1f4e9c;background:#e3ebfb;padding:2px 8px;border-radius:10px;">경계대상</span>'
+      : '<span style="font-size:11px;font-weight:700;color:#a4342a;background:#fbeceb;padding:2px 8px;border-radius:10px;">블랙리스트</span>';
+    return `
     <tr>
+      <td>${badge}</td>
       <td>${escapeHtml(item.name)}</td>
       <td>${escapeHtml(item.address)}</td>
       <td>${escapeHtml(item.phone)}</td>
+      <td style="max-width:180px;white-space:normal;">${escapeHtml(item.reason)}</td>
       <td><button class="btn btn-danger btn-small" data-id="${escapeHtml(item.id)}">삭제</button></td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
   listWrap.innerHTML = `
     <table>
-      <thead><tr><th>이름</th><th>주소</th><th>휴대폰</th><th></th></tr></thead>
+      <thead><tr><th>등급</th><th>이름</th><th>주소</th><th>휴대폰</th><th>사유</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   `;
@@ -256,17 +278,20 @@ document.getElementById('btnAdd').addEventListener('click', async ()=>{
   const name = document.getElementById('inName').value.trim();
   const address = document.getElementById('inAddress').value.trim();
   const phone = document.getElementById('inPhone').value.trim();
+  const level = document.getElementById('inLevel').value;
+  const reason = document.getElementById('inReason').value.trim();
   if(!name && !address && !phone){
     setStatus('이름, 주소, 휴대폰 중 최소 하나는 입력해주세요.', 'err');
     return;
   }
   setStatus('추가하는 중...', 'busy');
   try{
-    const data = await jsonp(apiUrl, { action:'add', name, address, phone });
+    const data = await jsonp(apiUrl, { action:'add', name, address, phone, level, reason });
     if(!data.ok) throw new Error(data.error || '추가 실패');
     document.getElementById('inName').value = '';
     document.getElementById('inAddress').value = '';
     document.getElementById('inPhone').value = '';
+    document.getElementById('inReason').value = '';
     setStatus('추가했어요.', 'ok');
     loadList();
   }catch(err){
