@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ETSY 엑셀 변환 - 준비 중</title>
+<title>ETSY 상품 라벨 생성 도구</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root{
     --ink:#22262b;
@@ -12,7 +15,9 @@
     --card:#ffffff;
     --accent:#a8425c;
     --accent-dark:#7f2f45;
+    --teal:#3a5a63;
     --line:#e4e0d8;
+    --good:#2f7d5a;
   }
   *{box-sizing:border-box;}
   body{
@@ -20,30 +25,466 @@
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Helvetica,Arial,sans-serif;
     background:var(--bg);
     color:var(--ink);
-    padding:48px 16px 64px;
+    padding:32px 16px 64px;
   }
-  .wrap{max-width:520px;margin:0 auto;text-align:center;}
+  .wrap{max-width:720px;margin:0 auto;}
   a.back{
     display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:var(--muted);
-    text-decoration:none;margin-bottom:24px;
+    text-decoration:none;margin-bottom:16px;
   }
+  header{margin-bottom:28px;}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:12px;letter-spacing:.06em;color:var(--accent-dark);
+    background:#f3e3e7;padding:4px 10px;border-radius:20px;
+    font-weight:600;
+  }
+  h1{font-size:25px;margin:14px 0 6px;letter-spacing:-.01em;}
+  .sub{color:var(--muted);font-size:14.5px;line-height:1.6;margin:0;}
+
   .card{
-    background:var(--card);border:1px solid var(--line);border-radius:16px;
-    padding:48px 28px;
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:24px;
+    margin-bottom:18px;
   }
-  .icon{font-size:40px;margin-bottom:12px;}
-  h1{font-size:20px;margin:0 0 10px;}
-  p{color:var(--muted);font-size:14px;line-height:1.7;margin:0;}
+  .step-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+  .step-num{
+    width:26px;height:26px;border-radius:50%;
+    background:var(--teal);color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;font-weight:700;flex:none;
+  }
+  .step-title{font-size:16px;font-weight:700;}
+
+  .drop{
+    border:1.5px dashed #c9c2b4;border-radius:10px;padding:28px 16px;
+    text-align:center;cursor:pointer;transition:border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.drag{border-color:var(--accent);background:#fbf3f5;}
+  .drop input{display:none;}
+  .drop .big{font-size:14.5px;font-weight:600;margin-bottom:4px;}
+  .drop .small{font-size:12.5px;color:var(--muted);}
+
+  .filepill{
+    display:inline-flex;align-items:center;gap:8px;
+    background:#eef0ee;border-radius:8px;padding:8px 12px;
+    font-size:13.5px;margin-top:12px;
+  }
+  .filepill .x{cursor:pointer;color:var(--muted);font-weight:700;}
+
+  .status{margin-top:14px;font-size:13.5px;padding:10px 12px;border-radius:8px;display:none;line-height:1.55;}
+  .status.show{display:block;}
+  .status.ok{background:#eaf5ef;color:var(--good);}
+  .status.err{background:#fbeceb;color:#a4342a;}
+  .status.busy{background:#eef1f6;color:var(--teal);}
+
+  .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px;}
+  .stat{background:#f7f6f2;border-radius:10px;padding:12px 14px;}
+  .stat .num{font-size:20px;font-weight:800;color:var(--accent-dark);}
+  .stat .lbl{font-size:12px;color:var(--muted);margin-top:2px;}
+
+  .btn{
+    width:100%;border:none;border-radius:10px;padding:14px 16px;
+    font-size:14.5px;font-weight:700;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    background:var(--accent);color:#fff;margin-top:18px;
+    transition:opacity .15s, transform .1s;
+  }
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn:not(:disabled):hover{transform:translateY(-1px);}
+
+  .reset-link{
+    display:inline-block;margin-top:12px;font-size:12.5px;color:var(--muted);
+    text-decoration:underline;cursor:pointer;
+  }
+  footer{text-align:center;color:var(--muted);font-size:12px;margin-top:24px;line-height:1.7;}
+
+  .modal-overlay{
+    display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);
+    align-items:center;justify-content:center;z-index:100;
+  }
+  .modal-overlay.show{display:flex;}
+  .modal{
+    background:#fff;border-radius:14px;padding:26px 24px;max-width:360px;width:90%;
+    text-align:center;
+  }
+  .modal .icon{font-size:32px;margin-bottom:8px;}
+  .modal h2{font-size:16px;margin:0 0 8px;}
+  .modal p{font-size:13.5px;color:var(--muted);line-height:1.6;margin:0 0 18px;}
+  .modal button{
+    border:none;background:var(--accent);color:#fff;border-radius:8px;
+    padding:10px 20px;font-size:13.5px;font-weight:700;cursor:pointer;
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
   <a class="back" href="etsy.html">← ETSY 메뉴로 돌아가기</a>
+  <header>
+    <span class="eyebrow">ETSY · 상품 라벨</span>
+    <h1>원본 주문 파일 → 상품 라벨</h1>
+    <p class="sub">ETSY에서 내려받은 원본 주문 CSV 하나만 올리면, 검수용 상품 라벨(폼텍 3145 양식)을 자동으로 만들어드려요. 파일은 브라우저 안에서만 처리되고 서버로 전송되지 않아요.</p>
+  </header>
+
   <div class="card">
-    <div class="icon">🚧</div>
-    <h1>ETSY 엑셀 변환은 준비 중이에요</h1>
-    <p>ETSY 원본 주문 파일 샘플을 주시면<br>CAFE24 도구처럼 만들어드릴 수 있어요.</p>
+    <div class="step-head">
+      <div class="step-num">1</div>
+      <div class="step-title">원본 주문 파일 업로드</div>
+    </div>
+
+    <div class="drop" id="dropzone">
+      <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+      <div class="big">클릭하거나 파일을 끌어다 놓으세요</div>
+      <div class="small">.csv — ETSY에서 내려받은 원본 그대로</div>
+    </div>
+
+    <div id="filepillWrap"></div>
+    <div class="status" id="status"></div>
+
+    <div class="summary" id="summary" style="display:none;">
+      <div class="stat"><div class="num" id="statLines">0</div><div class="lbl">원본 줄 수</div></div>
+      <div class="stat"><div class="num" id="statLabelItems">0</div><div class="lbl">라벨 항목 수</div></div>
+      <div class="stat"><div class="num" id="statLabelPages">0</div><div class="lbl">라벨 페이지 수</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="step-head">
+      <div class="step-num">2</div>
+      <div class="step-title">상품 라벨 파일 다운로드</div>
+    </div>
+    <button class="btn" id="btnLabel" disabled>🏷️ 상품 라벨 파일 다운로드</button>
+    <span class="reset-link" id="resetLink">다른 파일로 다시 시작</span>
+  </div>
+
+  <footer>
+    수령인이 바뀌면 이름 라벨(기본 <span style="color:#c2185b;font-weight:700;">분홍</span>), 이어서 상품명(+옵션) 라벨이 순서대로 채워져요 · 옵션이 있으면 상품명/옵션을 두 줄로, 없으면 상품명만 병합해서 표시 · 동명이인(이름 같고 주소 다름)은 <span style="color:#2a7fb0;font-weight:700;">하늘색</span>, 같은 사람 여러 주문(이름+주소 같고 주문번호 다름)은 <span style="color:#b58900;font-weight:700;">노란색</span> · 원본 양이 늘면 페이지가 자동으로 늘어남
+  </footer>
+</div>
+
+<div class="modal-overlay" id="dupModal">
+  <div class="modal">
+    <div class="icon">⚠️</div>
+    <h2 id="dupModalTitle">중복 의심 주문 발견</h2>
+    <p id="dupModalDesc"></p>
+    <button id="dupModalClose">확인</button>
   </div>
 </div>
+
+<script>
+const REQUIRED_COLS = ['Order ID','Ship Name','Ship Address1','Item Name'];
+
+let parsedRows = null;
+let labelSeq = null;
+let colorInfoGlobal = null;
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const statusEl = document.getElementById('status');
+const filepillWrap = document.getElementById('filepillWrap');
+const summaryEl = document.getElementById('summary');
+const btnLabel = document.getElementById('btnLabel');
+const resetLink = document.getElementById('resetLink');
+
+dropzone.addEventListener('click', ()=> fileInput.click());
+dropzone.addEventListener('dragover', e=>{e.preventDefault(); dropzone.classList.add('drag');});
+dropzone.addEventListener('dragleave', ()=> dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e=>{
+  e.preventDefault();
+  dropzone.classList.remove('drag');
+  if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e=>{
+  if(e.target.files.length) handleFile(e.target.files[0]);
+});
+resetLink.addEventListener('click', resetAll);
+document.getElementById('dupModalClose').addEventListener('click', ()=>{
+  document.getElementById('dupModal').classList.remove('show');
+});
+
+function resetAll(){
+  parsedRows = null; labelSeq = null; colorInfoGlobal = null;
+  fileInput.value = '';
+  filepillWrap.innerHTML = '';
+  summaryEl.style.display = 'none';
+  setStatus('', '');
+  btnLabel.disabled = true;
+}
+
+function setStatus(msg, kind){
+  if(!msg){ statusEl.className='status'; statusEl.textContent=''; return; }
+  statusEl.className = 'status show ' + kind;
+  statusEl.textContent = msg;
+}
+
+function stripBOM(s){ return typeof s === 'string' ? s.replace(/^\uFEFF/,'').trim() : s; }
+function trimVal(r, key){
+  const v = r[key];
+  return (v === undefined || v === null) ? '' : String(v).trim();
+}
+
+async function handleFile(file){
+  filepillWrap.innerHTML = `<div class="filepill">📄 ${file.name} <span class="x" title="제거">✕</span></div>`;
+  filepillWrap.querySelector('.x').addEventListener('click', resetAll);
+  setStatus('파일을 읽는 중...', 'busy');
+  btnLabel.disabled = true;
+  summaryEl.style.display = 'none';
+
+  try{
+    const ext = file.name.split('.').pop().toLowerCase();
+    let rows = ext === 'csv' ? await parseCSV(file) : await parseXLSX(file);
+
+    rows = rows.map(r=>{
+      const clean = {};
+      Object.keys(r).forEach(k=>{ clean[stripBOM(k)] = r[k]; });
+      return clean;
+    }).filter(r => Object.values(r).some(v => v !== undefined && v !== null && String(v).trim() !== ''));
+
+    const headerKeys = rows.length ? Object.keys(rows[0]) : [];
+    const missing = REQUIRED_COLS.filter(c => !headerKeys.includes(c));
+    if(missing.length){
+      setStatus(`원본 파일에서 다음 컬럼을 찾을 수 없어요: ${missing.join(', ')}`, 'err');
+      return;
+    }
+
+    // Order ID/Ship Name/Item Name 등 핵심 값이 비어있는 줄(빈 채움 줄)은 제외
+    rows = rows.filter(r => trimVal(r,'Order ID') && trimVal(r,'Ship Name') && trimVal(r,'Item Name'));
+
+    parsedRows = rows;
+    labelSeq = buildLabelSequence(rows);
+    colorInfoGlobal = computeNameColors(rows);
+
+    document.getElementById('statLines').textContent = rows.length.toLocaleString();
+    document.getElementById('statLabelItems').textContent = labelSeq.length.toLocaleString();
+    document.getElementById('statLabelPages').textContent = Math.max(1, Math.ceil(labelSeq.length/LABEL_PER_PAGE));
+    summaryEl.style.display = 'grid';
+
+    setStatus(`처리 완료! 원본 ${rows.length.toLocaleString()}줄 → 라벨 ${Math.ceil(labelSeq.length/LABEL_PER_PAGE)}페이지. 아래에서 다운로드하세요.`, 'ok');
+    btnLabel.disabled = false;
+  }catch(err){
+    console.error(err);
+    setStatus('파일을 읽는 중 오류가 발생했어요: ' + err.message, 'err');
+  }
+}
+
+function parseCSV(file){
+  return new Promise((resolve, reject)=>{
+    Papa.parse(file, {
+      header:true, skipEmptyLines:true, encoding:'UTF-8',
+      complete: res => resolve(res.data),
+      error: err => reject(err)
+    });
+  });
+}
+
+async function parseXLSX(file){
+  const buf = await file.arrayBuffer();
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const ws = wb.worksheets[0];
+  const headers = [];
+  const rows = [];
+  ws.eachRow((row, rowNumber)=>{
+    const vals = row.values;
+    if(rowNumber === 1){
+      for(let c=1;c<vals.length;c++) headers[c-1] = stripBOM(String(vals[c] ?? '').trim());
+    } else {
+      const obj = {};
+      for(let c=1;c<vals.length;c++){
+        let v = vals[c];
+        if(v && v.text !== undefined) v = v.text;
+        if(v instanceof Date) v = v.toISOString().slice(0,10);
+        obj[headers[c-1]] = v === undefined || v === null ? '' : v;
+      }
+      rows.push(obj);
+    }
+  });
+  return rows;
+}
+
+// ---- 라벨 시퀀스: 수령인(이름+주소1+주소2)이 바뀔 때마다 이름 항목, 이어서 상품명(+옵션) 항목 ----
+function buildLabelSequence(rows){
+  const seq = [];
+  let prevKey = null;
+  rows.forEach(r=>{
+    const name = trimVal(r,'Ship Name');
+    const addr = trimVal(r,'Ship Address1') + ' ' + trimVal(r,'Ship Address2');
+    const key = name + '||' + addr;
+    if(key !== prevKey){
+      seq.push({ type:'NAME', text:name, groupKey:key });
+      prevKey = key;
+    }
+    seq.push({ type:'PROD', line1: trimVal(r,'Item Name'), line2: trimVal(r,'Variations') });
+  });
+  return seq;
+}
+
+// 이름 칸 색상 판단: 기본 분홍 / 동명이인(이름 같고 주소 다름)은 하늘색 / 같은 사람 여러 주문(이름+주소 같고 주문번호 여러개)은 노란색
+function computeNameColors(rows){
+  const byNameAddr = new Map(); // "이름||주소1주소2" -> Set(주문번호)
+  const byName = new Map();     // 이름 -> Set(주소)
+  rows.forEach(r=>{
+    const name = trimVal(r,'Ship Name');
+    const addr = trimVal(r,'Ship Address1') + ' ' + trimVal(r,'Ship Address2');
+    const orderNo = trimVal(r,'Order ID');
+    const key = name + '||' + addr;
+    if(!byNameAddr.has(key)) byNameAddr.set(key, new Set());
+    byNameAddr.get(key).add(orderNo);
+    if(!byName.has(name)) byName.set(name, new Set());
+    byName.get(name).add(addr);
+  });
+  const yellowKeys = new Set();
+  byNameAddr.forEach((orderSet, key)=>{ if(orderSet.size >= 2) yellowKeys.add(key); });
+  const blueNames = new Set();
+  byName.forEach((addrSet, name)=>{ if(addrSet.size >= 2) blueNames.add(name); });
+  return { yellowKeys, blueNames };
+}
+
+function nameSlotColor(item, colorInfo){
+  if(colorInfo.yellowKeys.has(item.groupKey)) return 'FFFFFF00'; // 같은 사람 여러 주문
+  if(colorInfo.blueNames.has(item.text)) return 'FFADD8E6';       // 동명이인
+  return 'FFFFC0CB'; // 기본 분홍
+}
+
+function countDuplicateGroups(colorInfo){
+  return colorInfo.yellowKeys.size;
+}
+
+const todayTag = ()=>{
+  const d = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+};
+
+// ---- 라벨 시트 (폼텍 3145 양식, ETSY 원본 라벨 파일과 셀 크기 동일) ----
+const LABEL_COL_WIDTHS_FULL = [1.33203125,4.6640625,2.44140625,3.44140625,0.88671875,2.6640625,1.33203125,4.6640625,2.44140625,3.44140625,0.88671875,2.109375,1.33203125,4.6640625,2.44140625,3.44140625,0.88671875,2.6640625,1.33203125,4.6640625,2.44140625,3.44140625,0.88671875,2.33203125,1.33203125,4.6640625,2.44140625,3.44140625,0.88671875,1.33203125];
+const LABEL_ROW_HEIGHTS_FULL = [3.75,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,8.25,8.25,9.0,9.0,7.5,9.0,9.0,8.25,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.75,7.5,9.0,9.75,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,9.0,7.5,9.0,8.25,7.5];
+const LABEL_ANCHOR_OFFSETS = [0, 6, 12, 18, 24];
+const LABEL_FONT_NAME = '돋움';
+const LABEL_OPTION_COLOR = 'FF4F81BD';
+const LABEL_WEBSITE_FILL = 'FFC0C0C0';
+const LABEL_WEBSITE_TEXT = 'beadsmaker.etsy.com';
+const LABEL_PER_PAGE = 145;
+const LABEL_DEFAULT_FONT_XML = '<font><sz val="11"/><name val="돋움"/><family val="3"/><charset val="129"/></font>';
+
+function buildLabelSheet(ws, pageItems, colorInfo){
+  LABEL_COL_WIDTHS_FULL.forEach((w,i)=>{ ws.getColumn(i+1).width = w; });
+  LABEL_ROW_HEIGHTS_FULL.forEach((h,i)=>{ ws.getRow(i+1).height = h; });
+
+  ws.pageSetup = {
+    paperSize:9, orientation:'portrait',
+    margins:{left:0.770138888888889, right:0.196527777777778, top:0.65, bottom:0.236111111111111, header:0.511811023622047, footer:0.511811023622047}
+  };
+
+  for(let col=0; col<5; col++){
+    const anchor = 1 + LABEL_ANCHOR_OFFSETS[col];
+    for(let g=0; g<29; g++){
+      const r1 = 2+3*g, r2 = 3+3*g, r3 = 4+3*g;
+
+      const item = pageItems[col*29 + g];
+      if(!item) continue;
+
+      const baseFont = {name:LABEL_FONT_NAME, size:6, family:3, charset:129};
+      const centerTop = {horizontal:'center', vertical:'top', wrapText:true};
+
+      if(item.type === 'NAME'){
+        ws.mergeCells(r1, anchor, r2, anchor+4);
+        const c1 = ws.getCell(r1, anchor);
+        c1.value = item.text;
+        c1.font = baseFont;
+        c1.alignment = centerTop;
+        c1.fill = {type:'pattern', pattern:'solid', fgColor:{argb: nameSlotColor(item, colorInfo)}};
+      } else if(!item.line2){
+        ws.mergeCells(r1, anchor, r2, anchor+4);
+        const c1 = ws.getCell(r1, anchor);
+        c1.value = item.line1;
+        c1.font = baseFont;
+        c1.alignment = centerTop;
+      } else {
+        ws.mergeCells(r1, anchor, r1, anchor+4);
+        ws.mergeCells(r2, anchor, r2, anchor+4);
+        const c1 = ws.getCell(r1, anchor);
+        c1.value = item.line1;
+        c1.font = baseFont;
+        c1.alignment = centerTop;
+
+        const c2 = ws.getCell(r2, anchor);
+        c2.value = item.line2;
+        c2.font = {...baseFont, bold:true, color:{argb:LABEL_OPTION_COLOR}};
+        c2.alignment = centerTop;
+      }
+
+      ws.mergeCells(r3, anchor, r3, anchor+4);
+      const c3 = ws.getCell(r3, anchor);
+      c3.value = LABEL_WEBSITE_TEXT;
+      c3.font = {...baseFont, bold:true};
+      c3.alignment = centerTop;
+      c3.fill = {type:'pattern', pattern:'solid', fgColor:{argb:LABEL_WEBSITE_FILL}};
+    }
+  }
+}
+
+async function patchWorkbookDefaultFont(buf, fontXml){
+  const zip = await JSZip.loadAsync(buf);
+  const path = 'xl/styles.xml';
+  let xml = await zip.file(path).async('string');
+  xml = xml.replace(
+    /(<fonts count="\d+"[^>]*>)<font>.*?<\/font>/,
+    (m, opening) => `${opening}${fontXml}`
+  );
+  zip.file(path, xml);
+  return await zip.generateAsync({type:'uint8array'});
+}
+
+async function downloadWorkbook(wb, filename, patchDefaultFont){
+  let buf = await wb.xlsx.writeBuffer();
+  if(patchDefaultFont){
+    buf = await patchWorkbookDefaultFont(buf, patchDefaultFont);
+  }
+  const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 2000);
+}
+
+function showDupModal(count){
+  const modal = document.getElementById('dupModal');
+  const title = document.getElementById('dupModalTitle');
+  const desc = document.getElementById('dupModalDesc');
+  if(count > 0){
+    title.textContent = '중복 의심 주문 발견';
+    desc.textContent = `이름+주소가 같은데 주문번호가 다른 경우가 ${count}건 있어요. 라벨 파일에서 노란색으로 표시된 이름을 확인해주세요.`;
+  } else {
+    title.textContent = '중복 의심 주문 없음';
+    desc.textContent = '이름+주소 기준으로 중복된 주문이 발견되지 않았어요.';
+  }
+  modal.classList.add('show');
+}
+
+btnLabel.addEventListener('click', async ()=>{
+  if(!labelSeq) return;
+  btnLabel.disabled = true;
+  try{
+    const wb = new ExcelJS.Workbook();
+    const pageCount = Math.max(1, Math.ceil(labelSeq.length / LABEL_PER_PAGE));
+    for(let p=0; p<pageCount; p++){
+      const ws = wb.addWorksheet(`--${p+1}--`);
+      const pageItems = labelSeq.slice(p*LABEL_PER_PAGE, (p+1)*LABEL_PER_PAGE);
+      buildLabelSheet(ws, pageItems, colorInfoGlobal);
+    }
+    await downloadWorkbook(wb, `ETSY_라벨_${todayTag()}.xlsx`, LABEL_DEFAULT_FONT_XML);
+    showDupModal(countDuplicateGroups(colorInfoGlobal));
+  }catch(err){
+    console.error(err);
+    alert('라벨 파일 생성 중 오류: ' + err.message);
+  }finally{
+    btnLabel.disabled = false;
+  }
+});
+</script>
 </body>
 </html>
