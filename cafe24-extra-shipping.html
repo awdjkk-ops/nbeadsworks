@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>추가배송 관리</title>
+<style>
+  :root{
+    --ink:#22262b;
+    --muted:#6b7280;
+    --bg:#f4f2ee;
+    --card:#ffffff;
+    --accent:#a8425c;
+    --accent-dark:#7f2f45;
+    --teal:#3a5a63;
+    --line:#e4e0d8;
+    --good:#2f7d5a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    padding:32px 16px 64px;
+  }
+  .wrap{max-width:720px;margin:0 auto;}
+  a.back{
+    display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:var(--muted);
+    text-decoration:none;margin-bottom:16px;
+  }
+  header{margin-bottom:24px;}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:12px;letter-spacing:.06em;color:var(--accent-dark);
+    background:#f3e3e7;padding:4px 10px;border-radius:20px;
+    font-weight:600;
+  }
+  h1{font-size:23px;margin:14px 0 6px;letter-spacing:-.01em;}
+  .sub{color:var(--muted);font-size:14px;line-height:1.6;margin:0;}
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:22px;
+    margin-bottom:16px;
+  }
+
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-bottom:4px;}
+  .field input{
+    width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;
+    font-size:14px;font-family:inherit;
+  }
+  .field input:focus{outline:none;border-color:var(--accent);}
+
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  @media (max-width:560px){ .row3, .row2{grid-template-columns:1fr;} }
+
+  .btn{
+    border:none;border-radius:8px;padding:11px 18px;font-size:14px;font-weight:700;
+    cursor:pointer;transition:opacity .15s, transform .1s;
+  }
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn:not(:disabled):hover{transform:translateY(-1px);}
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-ghost{background:#eceae4;color:var(--ink);}
+  .btn-small{padding:6px 12px;font-size:12.5px;white-space:nowrap;}
+  .btn-danger{background:#fbeceb;color:#a4342a;}
+
+  .status{font-size:13px;padding:9px 12px;border-radius:8px;margin-top:10px;display:none;}
+  .status.show{display:block;}
+  .status.ok{background:#eaf5ef;color:var(--good);}
+  .status.err{background:#fbeceb;color:#a4342a;}
+  .status.busy{background:#eef1f6;color:var(--teal);}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);}
+  th{color:var(--muted);font-weight:600;font-size:12px;}
+  .empty{color:var(--muted);font-size:13.5px;text-align:center;padding:24px 0;}
+
+  td.note-cell{position:relative;max-width:140px;}
+  .note-truncate{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;}
+  .note-full{
+    display:none;position:absolute;left:0;top:calc(100% + 2px);z-index:30;
+    background:#fff;border:1px solid var(--line);border-radius:8px;
+    padding:10px 12px;box-shadow:0 6px 16px rgba(0,0,0,.14);
+    white-space:normal;width:220px;font-size:12.5px;line-height:1.55;color:var(--ink);
+  }
+  td.note-cell:hover .note-full{display:block;}
+  td.note-cell:hover .note-truncate{visibility:hidden;}
+
+  .setup-box{
+    background:#fff8e6;border:1px solid #f0d98c;border-radius:12px;padding:16px 18px;margin-bottom:16px;
+  }
+  .setup-box .field input{font-size:12.5px;}
+  .setup-box p{font-size:12.5px;color:#8a6a10;margin:0 0 10px;line-height:1.6;}
+  .connected-pill{
+    display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--good);
+    background:#eaf5ef;padding:4px 10px;border-radius:20px;font-weight:600;
+  }
+  .note-box{
+    background:#eef1f6;border-radius:10px;padding:12px 14px;font-size:12.5px;color:var(--teal);
+    line-height:1.6;margin-bottom:16px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="cafe24.html">← CAFE24 메뉴로 돌아가기</a>
+  <header>
+    <span class="eyebrow">CAFE24 · 추가배송 관리</span>
+    <h1>추가배송(재발송 등) 명단</h1>
+    <p class="sub">여기서 추가해두면 연결된 구글 시트에 저장돼요. 다른 컴퓨터에서 <b>택배 발송용 파일(2단계)</b>을 만들 때 자동으로 함께 포함되고, 포함된 항목은 목록에서 바로 사라져요.</p>
+  </header>
+
+  <div class="setup-box" id="setupBox" style="display:none;">
+    <p><b>처음 한 번만 설정하면 돼요.</b> 블랙리스트와 같은 Google Apps Script 배포 주소(https://script.google.com/macros/... 형태)를 붙여넣어주세요. 이미 블랙리스트에서 연결하셨다면 같은 주소를 그대로 쓰시면 돼요.</p>
+    <div class="field">
+      <label>웹 앱 배포 주소</label>
+      <input type="text" id="apiUrlInput" placeholder="https://script.google.com/macros/s/xxxxx/exec">
+    </div>
+    <button class="btn btn-primary btn-small" id="btnSaveUrl">연결하기</button>
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <div class="note-box">
+      ⓘ 이 목록은 <b>택배 발송용 파일을 만드는 순간 자동으로 포함되고 목록에서 삭제</b>돼요. 미리 등록해두면 다른 담당자가 파일을 만들 때 자동으로 같이 나가요.
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <span class="connected-pill">● 연결됨</span>
+        <span class="btn-ghost btn btn-small" id="btnChangeUrl">연결 주소 변경</span>
+      </div>
+      <div class="row3">
+        <div class="field">
+          <label>이름</label>
+          <input type="text" id="inName" placeholder="예: 홍길동">
+        </div>
+        <div class="field">
+          <label>우편번호</label>
+          <input type="text" id="inZip" placeholder="예: 12345">
+        </div>
+        <div class="field">
+          <label>주소</label>
+          <input type="text" id="inAddress" placeholder="예: 서울시 ...">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>전화번호1</label>
+          <input type="text" id="inTel1" placeholder="예: 02-000-0000">
+        </div>
+        <div class="field">
+          <label>전화번호2(휴대폰)</label>
+          <input type="text" id="inTel2" placeholder="예: 010-0000-0000">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>배송메시지 (선택)</label>
+          <input type="text" id="inMessage" placeholder="예: 문 앞에 놔주세요">
+        </div>
+        <div class="field">
+          <label>메모/사유 (선택, 상품명 칸에 표시됨)</label>
+          <input type="text" id="inMemo" placeholder="예: 재발송, 파손 교환 등">
+        </div>
+      </div>
+      <button class="btn btn-primary" id="btnAdd">+ 추가</button>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <b style="font-size:14.5px;">등록된 목록 (<span id="countLabel">0</span>건)</b>
+        <span class="btn-ghost btn btn-small" id="btnRefresh">새로고침</span>
+      </div>
+      <div id="listWrap"><div class="empty">불러오는 중...</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'blacklist_api_url'; // 블랙리스트와 동일한 배포 주소를 공유해서 씀
+let apiUrl = localStorage.getItem(STORAGE_KEY) || '';
+
+const setupBox = document.getElementById('setupBox');
+const mainArea = document.getElementById('mainArea');
+const apiUrlInput = document.getElementById('apiUrlInput');
+const statusEl = document.getElementById('status');
+const listWrap = document.getElementById('listWrap');
+const countLabel = document.getElementById('countLabel');
+
+function setStatus(msg, kind){
+  if(!msg){ statusEl.className = 'status'; statusEl.textContent=''; return; }
+  statusEl.className = 'status show ' + kind;
+  statusEl.textContent = msg;
+}
+
+function render(){
+  if(apiUrl){
+    setupBox.style.display = 'none';
+    mainArea.style.display = 'block';
+    loadList();
+  } else {
+    setupBox.style.display = 'block';
+    mainArea.style.display = 'none';
+  }
+}
+
+document.getElementById('btnSaveUrl').addEventListener('click', ()=>{
+  const v = apiUrlInput.value.trim();
+  if(!v.startsWith('https://script.google.com/')){
+    alert('올바른 Google Apps Script 웹 앱 주소를 입력해주세요.');
+    return;
+  }
+  apiUrl = v;
+  localStorage.setItem(STORAGE_KEY, apiUrl);
+  render();
+});
+
+document.getElementById('btnChangeUrl').addEventListener('click', ()=>{
+  if(confirm('연결 주소를 변경하시겠어요?')){
+    apiUrl = '';
+    localStorage.removeItem(STORAGE_KEY);
+    apiUrlInput.value = '';
+    render();
+  }
+});
+
+document.getElementById('btnRefresh').addEventListener('click', loadList);
+
+function jsonp(url, params){
+  return new Promise((resolve, reject)=>{
+    const cbName = 'cb_' + Date.now() + '_' + Math.floor(Math.random()*100000);
+    const timer = setTimeout(()=>{ cleanup(); reject(new Error('응답 시간 초과')); }, 15000);
+    function cleanup(){
+      clearTimeout(timer);
+      delete window[cbName];
+      if(script.parentNode) script.parentNode.removeChild(script);
+    }
+    window[cbName] = (data)=>{ cleanup(); resolve(data); };
+    const qs = new URLSearchParams({ ...params, callback: cbName }).toString();
+    const script = document.createElement('script');
+    script.src = url + (url.includes('?') ? '&' : '?') + qs;
+    script.onerror = ()=>{ cleanup(); reject(new Error('네트워크 오류 (주소가 올바른지 확인해주세요)')); };
+    document.body.appendChild(script);
+  });
+}
+
+async function loadList(){
+  listWrap.innerHTML = '<div class="empty">불러오는 중...</div>';
+  try{
+    const data = await jsonp(apiUrl, { action:'listExtra' });
+    if(!data.ok) throw new Error(data.error || '불러오기 실패');
+    renderList(data.items || []);
+  }catch(err){
+    console.error(err);
+    listWrap.innerHTML = `<div class="empty">불러오지 못했어요: ${err.message}</div>`;
+  }
+}
+
+function renderList(items){
+  countLabel.textContent = items.length;
+  if(items.length === 0){
+    listWrap.innerHTML = '<div class="empty">등록된 목록이 없어요.</div>';
+    return;
+  }
+  const rows = items.map(item => {
+    const noteText = escapeHtml(item.memo);
+    return `
+    <tr>
+      <td style="white-space:nowrap;">${escapeHtml(item.name)}</td>
+      <td>${escapeHtml(item.address)}</td>
+      <td style="white-space:nowrap;">${escapeHtml(item.tel1)}${item.tel1 && item.tel2 ? '<br>' : ''}${escapeHtml(item.tel2)}</td>
+      <td class="note-cell">
+        <span class="note-truncate">${noteText}</span>
+        <div class="note-full">${noteText}</div>
+      </td>
+      <td><button class="btn btn-danger btn-small" data-id="${escapeHtml(item.id)}">삭제</button></td>
+    </tr>
+  `;
+  }).join('');
+  listWrap.innerHTML = `
+    <table>
+      <thead><tr><th>이름</th><th>주소</th><th>전화</th><th>메모</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+  listWrap.querySelectorAll('button[data-id]').forEach(btn=>{
+    btn.addEventListener('click', ()=> deleteItem(btn.dataset.id));
+  });
+}
+
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+document.getElementById('btnAdd').addEventListener('click', async ()=>{
+  const name = document.getElementById('inName').value.trim();
+  const zip = document.getElementById('inZip').value.trim();
+  const address = document.getElementById('inAddress').value.trim();
+  const tel1 = document.getElementById('inTel1').value.trim();
+  const tel2 = document.getElementById('inTel2').value.trim();
+  const message = document.getElementById('inMessage').value.trim();
+  const memo = document.getElementById('inMemo').value.trim();
+  if(!name || !address){
+    setStatus('이름과 주소는 꼭 입력해주세요.', 'err');
+    return;
+  }
+  setStatus('추가하는 중...', 'busy');
+  try{
+    const data = await jsonp(apiUrl, { action:'addExtra', name, zip, address, tel1, tel2, message, memo });
+    if(!data.ok) throw new Error(data.error || '추가 실패');
+    document.getElementById('inName').value = '';
+    document.getElementById('inZip').value = '';
+    document.getElementById('inAddress').value = '';
+    document.getElementById('inTel1').value = '';
+    document.getElementById('inTel2').value = '';
+    document.getElementById('inMessage').value = '';
+    document.getElementById('inMemo').value = '';
+    setStatus('추가했어요.', 'ok');
+    loadList();
+  }catch(err){
+    console.error(err);
+    setStatus('추가하지 못했어요: ' + err.message, 'err');
+  }
+});
+
+async function deleteItem(id){
+  if(!confirm('이 항목을 삭제할까요?')) return;
+  try{
+    const data = await jsonp(apiUrl, { action:'deleteExtra', id });
+    if(!data.ok) throw new Error(data.error || '삭제 실패');
+    loadList();
+  }catch(err){
+    alert('삭제하지 못했어요: ' + err.message);
+  }
+}
+
+render();
+</script>
+</body>
+</html>

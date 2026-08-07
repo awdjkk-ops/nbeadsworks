@@ -39,9 +39,10 @@
   .sub{color:var(--muted);font-size:14.5px;line-height:1.6;margin:0;}
 
   .grid{
-    display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:32px;
+    display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:32px;
   }
-  @media (max-width:520px){ .grid{grid-template-columns:1fr;} }
+  @media (max-width:640px){ .grid{grid-template-columns:1fr 1fr;} }
+  @media (max-width:380px){ .grid{grid-template-columns:1fr;} }
 
   .card{
     background:var(--card);
@@ -65,6 +66,7 @@
   }
   .logo.excel{background:var(--teal);color:#fff;}
   .logo.blacklist{background:var(--accent);color:#fff;}
+  .logo.extra{background:#c07d1f;color:#fff;}
   .card-title{font-size:16px;font-weight:700;}
   .card-desc{font-size:12.5px;color:var(--muted);line-height:1.5;}
 </style>
@@ -89,6 +91,12 @@
       <div class="logo blacklist">🚫</div>
       <div class="card-title">블랙리스트 관리</div>
       <div class="card-desc">주의 고객 이름·주소·휴대폰 등록/삭제</div>
+    </a>
+
+    <a href="cafe24-extra-shipping.html" class="card">
+      <div class="logo extra">📦</div>
+      <div class="card-title">추가배송 관리</div>
+      <div class="card-desc">재발송 등 원본에 없는 배송 건 미리 등록</div>
     </a>
   </div>
 </div>

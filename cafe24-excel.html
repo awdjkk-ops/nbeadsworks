@@ -583,6 +583,19 @@ async function fetchBlacklist(){
   }
 }
 
+// 추가배송(재발송 등) 항목을 가져오면서 동시에 목록에서 삭제 (같은 배포 주소 재사용)
+async function fetchAndClearExtraShipping(){
+  const apiUrl = localStorage.getItem(BLACKLIST_STORAGE_KEY);
+  if(!apiUrl) return { items: [], connected:false };
+  try{
+    const data = await jsonp(apiUrl, { action:'listAndClearExtra' });
+    if(!data.ok) return { items: [], connected:true, error:data.error };
+    return { items: data.items || [], connected:true };
+  }catch(err){
+    return { items: [], connected:true, error: err.message };
+  }
+}
+
 // 이름+주소가 둘 다 일치 OR 휴대폰이 일치하면 매칭. 등급(블랙리스트/경계대상)과 사유까지 함께 반환.
 // 반환: Map(rowIndex -> { level: '블랙리스트'|'경계대상', reasons: string[] })
 function computeBlacklistMatches(courierRows, blacklistItems){
@@ -797,11 +810,20 @@ btnCourier.addEventListener('click', async ()=>{
   if(!courierRows) return;
   btnCourier.disabled = true;
   try{
-    setStatus('블랙리스트 확인 중...', 'busy');
+    setStatus('블랙리스트/추가배송 확인 중...', 'busy');
     const { items: blacklistItems, connected, error: blErr } = await fetchBlacklist();
     if(connected && blErr){
       console.warn('블랙리스트 조회 실패:', blErr);
     }
+    const { items: extraItems, connected: extraConnected, error: extraErr } = await fetchAndClearExtraShipping();
+    if(extraConnected && extraErr){
+      console.warn('추가배송 조회 실패:', extraErr);
+    }
+    const extraCourierRows = extraItems.map(it => ({
+      recipient: it.name, zip: it.zip, address: it.address, tel1: it.tel1, tel2: it.tel2,
+      orderNo: it.memo || '추가배송', note: it.message || '0'
+    }));
+    const allCourierRows = courierRows.concat(extraCourierRows);
 
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('택배발송');
@@ -810,7 +832,7 @@ btnCourier.addEventListener('click', async ()=>{
     ws.getRow(1).alignment = {wrapText:true, vertical:'middle', horizontal:'center'};
     ws.getRow(1).height = 32;
 
-    courierRows.forEach(cr=>{
+    allCourierRows.forEach(cr=>{
       ws.addRow([
         cr.recipient, cr.zip, cr.address, cr.tel1, cr.tel2,
         cr.orderNo, 1, null, null, cr.note,
@@ -820,15 +842,15 @@ btnCourier.addEventListener('click', async ()=>{
 
     ws.columns.forEach((col, i)=>{ col.width = [22,10,42,16,16,20,7,10,14,20,10,10,12,16,16,42][i] || 16; });
 
-    const { blueRows, yellowRows } = computeHighlights(courierRows);
-    const blacklistRows = computeBlacklistMatches(courierRows, blacklistItems);
+    const { blueRows, yellowRows } = computeHighlights(allCourierRows);
+    const blacklistRows = computeBlacklistMatches(allCourierRows, blacklistItems);
     const skyBlue = {type:'pattern', pattern:'solid', fgColor:{argb:'FFADD8E6'}};
     const yellow = {type:'pattern', pattern:'solid', fgColor:{argb:'FFFFFF00'}};
     const red = {type:'pattern', pattern:'solid', fgColor:{argb:'FFC0392B'}};
     const watchBlue = {type:'pattern', pattern:'solid', fgColor:{argb:'FF1F4E9C'}};
     const whiteFont = {color:{argb:'FFFFFFFF'}, bold:true};
 
-    courierRows.forEach((cr, i)=>{
+    allCourierRows.forEach((cr, i)=>{
       const sheetRow = i + 2;
       const blMatch = blacklistRows.get(i);
       if(blMatch){
@@ -853,7 +875,8 @@ btnCourier.addEventListener('click', async ()=>{
     });
 
     const blCount = blacklistRows.size;
-    setStatus(blCount > 0 ? `택배 발송용 파일 생성 완료 (블랙리스트/경계대상 ${blCount}건 발견)` : '택배 발송용 파일 생성 완료', 'ok');
+    const extraNote = extraCourierRows.length > 0 ? `, 추가배송 ${extraCourierRows.length}건 포함` : '';
+    setStatus((blCount > 0 ? `택배 발송용 파일 생성 완료 (블랙리스트/경계대상 ${blCount}건 발견${extraNote})` : `택배 발송용 파일 생성 완료${extraNote}`), 'ok');
     await downloadWorkbook(wb, `택배발송_${todayTag()}.xlsx`);
   }catch(err){
     console.error(err);
