@@ -497,7 +497,7 @@ function buildCourierRows(rows){
   rows.forEach(r=>{
     const recipient = trimVal(r,'수령인');
     const zip = normalizeZip(trimVal(r,'우편번호'));
-    const address = trimVal(r,'주소');
+    const address = trimVal(r,'주소').replace(/~/g, '-'); // 롯데택배 송장 시스템이 '~'를 인식 못해서 '-'로 치환
     const tel1 = trimVal(r,'전화번호');
     const tel2 = trimVal(r,'핸드폰');
     const orderNo = trimVal(r,'주문번호');
@@ -820,7 +820,7 @@ btnCourier.addEventListener('click', async ()=>{
       console.warn('추가배송 조회 실패:', extraErr);
     }
     const extraCourierRows = extraItems.map(it => ({
-      recipient: it.name, zip: it.zip, address: it.address, tel1: it.tel1, tel2: it.tel2,
+      recipient: it.name, zip: it.zip, address: String(it.address ?? '').replace(/~/g, '-'), tel1: it.tel1, tel2: it.tel2,
       orderNo: it.memo || '추가배송', note: it.message || '0'
     }));
     const allCourierRows = courierRows.concat(extraCourierRows);
