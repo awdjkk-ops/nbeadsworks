@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>재고부족 관리</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<style>
+  :root{
+    --ink:#22262b;
+    --muted:#6b7280;
+    --bg:#f4f2ee;
+    --card:#ffffff;
+    --accent:#a8425c;
+    --accent-dark:#7f2f45;
+    --teal:#3a5a63;
+    --line:#e4e0d8;
+    --good:#2f7d5a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    padding:32px 16px 64px;
+  }
+  .wrap{max-width:860px;margin:0 auto;}
+  a.back{
+    display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:var(--muted);
+    text-decoration:none;margin-bottom:16px;
+  }
+  header{margin-bottom:24px;}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:12px;letter-spacing:.06em;color:var(--accent-dark);
+    background:#f3e3e7;padding:4px 10px;border-radius:20px;
+    font-weight:600;
+  }
+  h1{font-size:23px;margin:14px 0 6px;letter-spacing:-.01em;}
+  .sub{color:var(--muted);font-size:14px;line-height:1.6;margin:0;}
+
+  .tabs{display:flex;gap:6px;margin-bottom:16px;}
+  .tab{
+    flex:1;text-align:center;padding:11px;border-radius:10px;
+    background:#eceae4;color:var(--muted);font-weight:700;font-size:13.5px;cursor:pointer;
+  }
+  .tab.active{background:var(--teal);color:#fff;}
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:22px;
+    margin-bottom:16px;
+  }
+
+  textarea{
+    width:100%;min-height:160px;padding:12px;border:1px solid var(--line);border-radius:8px;
+    font-size:13.5px;font-family:inherit;line-height:1.7;resize:vertical;
+  }
+  textarea:focus{outline:none;border-color:var(--accent);}
+
+  .btn{
+    border:none;border-radius:8px;padding:11px 18px;font-size:14px;font-weight:700;
+    cursor:pointer;transition:opacity .15s, transform .1s;
+  }
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn:not(:disabled):hover{transform:translateY(-1px);}
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-ghost{background:#eceae4;color:var(--ink);}
+  .btn-small{padding:6px 12px;font-size:12.5px;white-space:nowrap;}
+  .btn-danger{background:#fbeceb;color:#a4342a;}
+  .btn-block{width:100%;margin-top:10px;}
+
+  .status{font-size:13px;padding:9px 12px;border-radius:8px;margin-top:10px;display:none;}
+  .status.show{display:block;}
+  .status.ok{background:#eaf5ef;color:var(--good);}
+  .status.err{background:#fbeceb;color:#a4342a;}
+  .status.busy{background:#eef1f6;color:var(--teal);}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{color:var(--muted);font-weight:600;font-size:12px;}
+  .empty{color:var(--muted);font-size:13.5px;text-align:center;padding:24px 0;}
+
+  .code-group{margin-bottom:2px;}
+  .code-badge{
+    display:inline-block;font-size:11.5px;font-weight:700;color:var(--teal);
+    background:#eef1f6;padding:2px 8px;border-radius:6px;margin-bottom:4px;
+  }
+  .qty-input{
+    width:56px;padding:5px 6px;border:1px solid var(--line);border-radius:6px;
+    font-size:13px;text-align:center;
+  }
+  .row-check{margin-right:6px;}
+  tr.merge-suspect{background:#fff8e6;}
+
+  .setup-box{
+    background:#fff8e6;border:1px solid #f0d98c;border-radius:12px;padding:16px 18px;margin-bottom:16px;
+  }
+  .setup-box .field input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;}
+  .setup-box p{font-size:12.5px;color:#8a6a10;margin:0 0 10px;line-height:1.6;}
+  .connected-pill{
+    display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--good);
+    background:#eaf5ef;padding:4px 10px;border-radius:20px;font-weight:600;
+  }
+  .note-box{
+    background:#eef1f6;border-radius:10px;padding:12px 14px;font-size:12.5px;color:var(--teal);
+    line-height:1.6;margin-bottom:16px;
+  }
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="cafe24.html">← CAFE24 메뉴로 돌아가기</a>
+  <header>
+    <span class="eyebrow">CAFE24 · 재고부족 관리</span>
+    <h1>재고부족 물품 정리</h1>
+    <p class="sub">평소 적으시던 방식 그대로(상품코드-상품명 - 옵션 *수량) 여러 줄 붙여넣으시면 돼요. 다른 컴퓨터에서도 같은 목록을 보고 추가/정리할 수 있어요.</p>
+  </header>
+
+  <div class="setup-box" id="setupBox" style="display:none;">
+    <p><b>처음 한 번만 설정하면 돼요.</b> 블랙리스트/추가배송과 같은 Google Apps Script 배포 주소를 붙여넣어주세요.</p>
+    <div class="field" style="margin-bottom:10px;">
+      <input type="text" id="apiUrlInput" placeholder="https://script.google.com/macros/s/xxxxx/exec">
+    </div>
+    <button class="btn btn-primary btn-small" id="btnSaveUrl">연결하기</button>
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <span class="connected-pill">● 연결됨</span>
+      <span class="btn-ghost btn btn-small" id="btnChangeUrl">연결 주소 변경</span>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" id="tabAdd">➕ 입력</div>
+      <div class="tab" id="tabOrganize">🧮 정리하기</div>
+    </div>
+
+    <div id="paneAdd">
+      <div class="card">
+        <p style="font-size:12.5px;color:var(--muted);margin:0 0 10px;">한 줄에 하나씩, 평소 적으시던 대로 붙여넣으세요.</p>
+        <textarea id="bulkInput" placeholder="RR10-고급형 더블반구멍용 반지대(프리사이즈) 백금도금-20&#10;SG462-써지컬스틸 고리 민볼 펜던트 무도금실버  - 6mm&#10;..."></textarea>
+        <button class="btn btn-primary btn-block" id="btnAddBulk">+ 목록에 추가</button>
+        <div class="status" id="addStatus"></div>
+      </div>
+
+      <div class="card">
+        <div class="toolbar">
+          <b style="font-size:14.5px;">등록된 원본 목록 (<span id="rawCount">0</span>건)</b>
+          <span class="btn-ghost btn btn-small" id="btnRefreshRaw">새로고침</span>
+        </div>
+        <div id="rawListWrap"><div class="empty">불러오는 중...</div></div>
+      </div>
+    </div>
+
+    <div id="paneOrganize" style="display:none;">
+      <div class="note-box">
+        ⓘ 상품코드+설명이 <b>완전히 같은 줄은 자동으로 수량을 합쳐요.</b> 코드는 같은데 설명이 조금 다른 것들은 <span style="background:#fff8e6;padding:1px 5px;border-radius:4px;">노란 배경</span>으로 표시하니 눈으로 확인 후 필요하면 합쳐주세요.
+      </div>
+      <div class="card">
+        <div class="toolbar">
+          <b style="font-size:14.5px;">정리된 목록 (<span id="orgCount">0</span>항목)</b>
+          <div style="display:flex;gap:6px;">
+            <span class="btn-ghost btn btn-small" id="btnMergeSelected">선택 항목 합치기</span>
+            <span class="btn-ghost btn btn-small" id="btnDownload">엑셀로 다운로드</span>
+          </div>
+        </div>
+        <div id="orgListWrap"><div class="empty">먼저 "정리하기" 탭을 눌러주세요.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'blacklist_api_url'; // 블랙리스트/추가배송과 동일한 배포 주소 공유
+let apiUrl = localStorage.getItem(STORAGE_KEY) || '';
+let rawItems = []; // {id, text, createdAt}
+let organized = []; // {code, desc, qty, ids:[], suspect:boolean}
+
+const setupBox = document.getElementById('setupBox');
+const mainArea = document.getElementById('mainArea');
+const apiUrlInput = document.getElementById('apiUrlInput');
+
+function render(){
+  if(apiUrl){
+    setupBox.style.display = 'none';
+    mainArea.style.display = 'block';
+    loadRaw();
+  } else {
+    setupBox.style.display = 'block';
+    mainArea.style.display = 'none';
+  }
+}
+
+document.getElementById('btnSaveUrl').addEventListener('click', ()=>{
+  const v = apiUrlInput.value.trim();
+  if(!v.startsWith('https://script.google.com/')){
+    alert('올바른 Google Apps Script 웹 앱 주소를 입력해주세요.');
+    return;
+  }
+  apiUrl = v;
+  localStorage.setItem(STORAGE_KEY, apiUrl);
+  render();
+});
+document.getElementById('btnChangeUrl').addEventListener('click', ()=>{
+  if(confirm('연결 주소를 변경하시겠어요?')){
+    apiUrl = '';
+    localStorage.removeItem(STORAGE_KEY);
+    apiUrlInput.value = '';
+    render();
+  }
+});
+
+// 탭 전환
+const tabAdd = document.getElementById('tabAdd');
+const tabOrganize = document.getElementById('tabOrganize');
+const paneAdd = document.getElementById('paneAdd');
+const paneOrganize = document.getElementById('paneOrganize');
+tabAdd.addEventListener('click', ()=>{
+  tabAdd.classList.add('active'); tabOrganize.classList.remove('active');
+  paneAdd.style.display='block'; paneOrganize.style.display='none';
+});
+tabOrganize.addEventListener('click', ()=>{
+  tabOrganize.classList.add('active'); tabAdd.classList.remove('active');
+  paneOrganize.style.display='block'; paneAdd.style.display='none';
+  runOrganize();
+});
+
+function jsonp(url, params){
+  return new Promise((resolve, reject)=>{
+    const cbName = 'cb_' + Date.now() + '_' + Math.floor(Math.random()*100000);
+    const timer = setTimeout(()=>{ cleanup(); reject(new Error('응답 시간 초과')); }, 15000);
+    function cleanup(){
+      clearTimeout(timer);
+      delete window[cbName];
+      if(script.parentNode) script.parentNode.removeChild(script);
+    }
+    window[cbName] = (data)=>{ cleanup(); resolve(data); };
+    const qs = new URLSearchParams({ ...params, callback: cbName }).toString();
+    const script = document.createElement('script');
+    script.src = url + (url.includes('?') ? '&' : '?') + qs;
+    script.onerror = ()=>{ cleanup(); reject(new Error('네트워크 오류')); };
+    document.body.appendChild(script);
+  });
+}
+
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ---- 입력 탭 ----
+async function loadRaw(){
+  const wrap = document.getElementById('rawListWrap');
+  wrap.innerHTML = '<div class="empty">불러오는 중...</div>';
+  try{
+    const data = await jsonp(apiUrl, { action:'listShortage' });
+    if(!data.ok) throw new Error(data.error || '불러오기 실패');
+    rawItems = data.items || [];
+    renderRawList();
+  }catch(err){
+    wrap.innerHTML = `<div class="empty">불러오지 못했어요: ${err.message}</div>`;
+  }
+}
+
+function renderRawList(){
+  document.getElementById('rawCount').textContent = rawItems.length;
+  const wrap = document.getElementById('rawListWrap');
+  if(rawItems.length === 0){
+    wrap.innerHTML = '<div class="empty">등록된 항목이 없어요.</div>';
+    return;
+  }
+  const rows = rawItems.map(it => `
+    <tr>
+      <td>${escapeHtml(it.text)}</td>
+      <td><button class="btn btn-danger btn-small" data-id="${escapeHtml(it.id)}">삭제</button></td>
+    </tr>
+  `).join('');
+  wrap.innerHTML = `<table><tbody>${rows}</tbody></table>`;
+  wrap.querySelectorAll('button[data-id]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      if(!confirm('삭제할까요?')) return;
+      await jsonp(apiUrl, { action:'deleteShortage', id: btn.dataset.id });
+      loadRaw();
+    });
+  });
+}
+
+document.getElementById('btnRefreshRaw').addEventListener('click', loadRaw);
+
+document.getElementById('btnAddBulk').addEventListener('click', async ()=>{
+  const text = document.getElementById('bulkInput').value;
+  const statusEl = document.getElementById('addStatus');
+  if(!text.trim()){
+    statusEl.className = 'status show err'; statusEl.textContent = '내용을 입력해주세요.';
+    return;
+  }
+  statusEl.className = 'status show busy'; statusEl.textContent = '추가하는 중...';
+  try{
+    const data = await jsonp(apiUrl, { action:'addShortageBulk', text });
+    if(!data.ok) throw new Error(data.error || '추가 실패');
+    statusEl.className = 'status show ok'; statusEl.textContent = `${data.count}줄 추가했어요.`;
+    document.getElementById('bulkInput').value = '';
+    loadRaw();
+  }catch(err){
+    statusEl.className = 'status show err'; statusEl.textContent = '추가하지 못했어요: ' + err.message;
+  }
+});
+
+// ---- 정리하기 탭 ----
+function parseLine(line){
+  const codeMatch = line.match(/^([A-Za-z0-9]+)-/);
+  if(!codeMatch) return { code:'(코드없음)', desc: line.trim(), qty: 1 };
+  const code = codeMatch[1];
+  let rest = line.slice(codeMatch[0].length);
+  let qty = null;
+  let m = rest.match(/\*\s*(\d+)\s*(개|줄|미터|m)?\s*$/);
+  if(m){ qty = parseInt(m[1],10); rest = rest.slice(0, m.index); }
+  else {
+    m = rest.match(/-\s*(\d+)\s*(개)?\s*$/);
+    if(m){ qty = parseInt(m[1],10); rest = rest.slice(0, m.index); }
+  }
+  if(qty === null) qty = 1;
+  return { code, desc: rest.trim().replace(/\s+/g,' '), qty };
+}
+
+function runOrganize(){
+  // 1) 완전히 같은 (코드+설명)끼리 합산
+  const map = new Map(); // key -> {code, desc, qty, ids}
+  rawItems.forEach(it=>{
+    const p = parseLine(it.text);
+    const key = p.code + '||' + p.desc;
+    if(!map.has(key)) map.set(key, { code:p.code, desc:p.desc, qty:0, ids:[] });
+    const g = map.get(key);
+    g.qty += p.qty;
+    g.ids.push(it.id);
+  });
+  let groups = Array.from(map.values());
+
+  // 2) 코드+설명 기준 정렬 (엑셀 정렬과 같은 효과 -> 비슷한 것끼리 이웃하게)
+  groups.sort((a,b)=> (a.code+a.desc).localeCompare(b.code+b.desc, 'ko'));
+
+  // 3) 같은 코드가 2개 이상인 그룹은 "확인 필요"로 표시(설명이 서로 달라서 안 합쳐진 것들)
+  const codeCounts = new Map();
+  groups.forEach(g => codeCounts.set(g.code, (codeCounts.get(g.code)||0)+1));
+  groups.forEach(g => { g.suspect = codeCounts.get(g.code) > 1; });
+
+  organized = groups;
+  renderOrganized();
+}
+
+function renderOrganized(){
+  document.getElementById('orgCount').textContent = organized.length;
+  const wrap = document.getElementById('orgListWrap');
+  if(organized.length === 0){
+    wrap.innerHTML = '<div class="empty">정리할 항목이 없어요.</div>';
+    return;
+  }
+  const rows = organized.map((g, i) => `
+    <tr class="${g.suspect ? 'merge-suspect' : ''}">
+      <td><input type="checkbox" class="row-check" data-idx="${i}"></td>
+      <td><span class="code-badge">${escapeHtml(g.code)}</span><br>${escapeHtml(g.desc)}</td>
+      <td><input type="number" class="qty-input" data-idx="${i}" value="${g.qty}" min="0"></td>
+    </tr>
+  `).join('');
+  wrap.innerHTML = `
+    <table>
+      <thead><tr><th></th><th>코드 / 설명</th><th>수량</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+  wrap.querySelectorAll('.qty-input').forEach(inp=>{
+    inp.addEventListener('change', ()=>{
+      organized[Number(inp.dataset.idx)].qty = Number(inp.value) || 0;
+    });
+  });
+}
+
+document.getElementById('btnMergeSelected').addEventListener('click', ()=>{
+  const checked = Array.from(document.querySelectorAll('.row-check:checked')).map(c=>Number(c.dataset.idx));
+  if(checked.length < 2){
+    alert('합칠 항목을 2개 이상 선택해주세요.');
+    return;
+  }
+  checked.sort((a,b)=>a-b);
+  const base = organized[checked[0]];
+  for(let i=1;i<checked.length;i++){
+    base.qty += organized[checked[i]].qty;
+    base.ids.push(...organized[checked[i]].ids);
+  }
+  // 뒤에서부터 제거
+  for(let i=checked.length-1;i>=1;i--){
+    organized.splice(checked[i],1);
+  }
+  // 병합 후 남은 동일 코드가 1개뿐이면 suspect 해제
+  const codeCounts = new Map();
+  organized.forEach(g => codeCounts.set(g.code, (codeCounts.get(g.code)||0)+1));
+  organized.forEach(g => { g.suspect = codeCounts.get(g.code) > 1; });
+  renderOrganized();
+});
+
+document.getElementById('btnDownload').addEventListener('click', async ()=>{
+  if(organized.length === 0){ alert('먼저 정리하기를 실행해주세요.'); return; }
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('재고부족');
+  ws.addRow(['상품코드','설명(옵션 등)','필요수량']);
+  ws.getRow(1).font = {bold:true};
+  organized.forEach(g=>{
+    ws.addRow([g.code, g.desc, g.qty]);
+  });
+  ws.getColumn(1).width = 14;
+  ws.getColumn(2).width = 50;
+  ws.getColumn(3).width = 12;
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const d = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  a.href = url;
+  a.download = `재고부족_${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}.xlsx`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+});
+
+render();
+</script>
+</body>
+</html>
