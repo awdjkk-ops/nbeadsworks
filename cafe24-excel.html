@@ -104,6 +104,56 @@
     display:inline-block;margin-top:12px;font-size:12.5px;color:var(--muted);
     text-decoration:underline;cursor:pointer;
   }
+
+  .sheet-picker-toggle{
+    margin-top:14px;padding:10px 12px;background:#f7f6f2;border-radius:8px;
+    font-size:13px;font-weight:600;color:var(--teal);cursor:pointer;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .sheet-picker-box{
+    margin-top:10px;padding:16px;background:#f7f6f2;border-radius:10px;
+  }
+  .sheet-picker-desc{font-size:12.5px;color:var(--muted);line-height:1.6;margin:0 0 12px;}
+  .sheet-grid{
+    display:flex;gap:10px;justify-content:center;
+    background:#fff;border-radius:8px;padding:14px 10px;
+  }
+  .sheet-grid-group{display:flex;align-items:stretch;gap:2px;flex:1;max-width:72px;}
+  .sheet-grid-numbers{
+    display:flex;flex-direction:column;gap:1.5px;
+    font-size:6px;line-height:1;color:var(--muted);
+    text-align:right;padding-right:2px;width:12px;flex:none;
+  }
+  .sheet-grid-numbers span{height:11px;display:flex;align-items:center;justify-content:flex-end;}
+  .sheet-grid-col{display:flex;flex-direction:column;gap:1.5px;flex:1;min-width:0;}
+  .sheet-cell{
+    height:11px;border-radius:1.5px;cursor:pointer;
+    background:var(--accent);opacity:.85;
+    transition:opacity .1s;
+  }
+  .sheet-cell:hover{opacity:1;outline:1px solid var(--accent-dark);}
+  .sheet-cell.used{background:#d8d4ca;cursor:default;}
+  .sheet-cell.used:hover{outline:none;opacity:1;}
+  .sheet-picker-info{
+    display:flex;justify-content:space-between;align-items:center;
+    margin-top:10px;font-size:12.5px;color:var(--ink);
+  }
+  .sheet-picker-info b{color:var(--accent-dark);}
+  .sheet-picker-reset{color:var(--muted);text-decoration:underline;cursor:pointer;font-size:12px;}
+  .sheet-picker-number{
+    display:flex;align-items:center;gap:8px;margin-top:12px;
+    font-size:12.5px;color:var(--ink);
+  }
+  .sheet-picker-number input{
+    width:70px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;
+    font-size:13px;font-family:inherit;text-align:center;
+  }
+  .sheet-picker-number input:focus{outline:none;border-color:var(--accent);}
+  .sheet-picker-number button{
+    border:none;background:var(--teal);color:#fff;border-radius:8px;
+    padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer;
+  }
+
   footer{text-align:center;color:var(--muted);font-size:12px;margin-top:24px;line-height:1.7;}
 </style>
 </head>
@@ -153,6 +203,24 @@
     </div>
     <button class="btn" id="btnConvert" disabled>📄 1단계 · 변환된 파일 다운로드</button>
     <button class="btn btn-secondary" id="btnCourier" disabled>📦 2단계 · 택배 발송용 파일 다운로드</button>
+
+    <div class="sheet-picker-toggle" id="sheetPickerToggle">
+      🏷️ 라벨지 시작 위치 지정하기 (이미 일부 사용한 라벨지 재사용) <span id="sheetPickerToggleArrow">▾</span>
+    </div>
+    <div class="sheet-picker-box" id="sheetPickerBox" style="display:none;">
+      <p class="sheet-picker-desc">이미 사용한 칸이 있다면, 실제 라벨지에서 <b>다음으로 인쇄할 첫 칸</b>을 클릭하세요. 클릭한 칸부터 끝까지 첫 페이지에 채워지고, 넘치는 분량은 새 라벨지(1번부터)로 자동으로 넘어가요.</p>
+      <div class="sheet-grid" id="sheetGrid"></div>
+      <div class="sheet-picker-info">
+        <span id="sheetPickerInfo">1번부터 시작 (전체 사용)</span>
+        <span class="sheet-picker-reset" id="sheetPickerReset">처음부터 다시 시작</span>
+      </div>
+      <div class="sheet-picker-number">
+        <span>번호로 직접 지정:</span>
+        <input type="number" id="sheetSlotInput" min="1" max="145" placeholder="1~145">
+        <button id="sheetSlotApply">적용</button>
+      </div>
+    </div>
+
     <button class="btn btn-secondary" id="btnLabel" disabled>🏷️ 3단계 · 라벨 스티커 파일 다운로드</button>
     <span class="reset-link" id="resetLink">다른 파일로 다시 시작</span>
   </div>
@@ -795,18 +863,107 @@ btnCourier.addEventListener('click', async ()=>{
   }
 });
 
+// ---- 라벨지 시작 위치 선택기 (5열x29행, 이미 사용한 칸 건너뛰기) ----
+let labelStartSlot = 1; // 1~145, 이 번호부터 첫 페이지에 채움
+
+const sheetPickerToggle = document.getElementById('sheetPickerToggle');
+const sheetPickerBox = document.getElementById('sheetPickerBox');
+const sheetGrid = document.getElementById('sheetGrid');
+const sheetPickerInfo = document.getElementById('sheetPickerInfo');
+const sheetPickerReset = document.getElementById('sheetPickerReset');
+const sheetSlotInput = document.getElementById('sheetSlotInput');
+const sheetSlotApply = document.getElementById('sheetSlotApply');
+
+sheetPickerToggle.addEventListener('click', ()=>{
+  const showing = sheetPickerBox.style.display !== 'none';
+  sheetPickerBox.style.display = showing ? 'none' : 'block';
+  document.getElementById('sheetPickerToggleArrow').textContent = showing ? '▾' : '▴';
+});
+
+function buildSheetGrid(){
+  sheetGrid.innerHTML = '';
+  for(let col=0; col<5; col++){
+    const group = document.createElement('div');
+    group.className = 'sheet-grid-group';
+
+    const numbers = document.createElement('div');
+    numbers.className = 'sheet-grid-numbers';
+    for(let row=0; row<29; row++){
+      const span = document.createElement('span');
+      span.textContent = row+1;
+      numbers.appendChild(span);
+    }
+    group.appendChild(numbers);
+
+    const colDiv = document.createElement('div');
+    colDiv.className = 'sheet-grid-col';
+    for(let row=0; row<29; row++){
+      const slot = col*29 + row + 1;
+      const cell = document.createElement('div');
+      cell.className = 'sheet-cell';
+      cell.dataset.slot = slot;
+      cell.title = `${slot}번`;
+      cell.addEventListener('click', ()=> setLabelStartSlot(slot));
+      colDiv.appendChild(cell);
+    }
+    group.appendChild(colDiv);
+    sheetGrid.appendChild(group);
+  }
+  renderSheetGrid();
+}
+
+function renderSheetGrid(){
+  sheetGrid.querySelectorAll('.sheet-cell').forEach(cell=>{
+    const slot = Number(cell.dataset.slot);
+    cell.classList.toggle('used', slot < labelStartSlot);
+  });
+  if(labelStartSlot <= 1){
+    sheetPickerInfo.innerHTML = '1번부터 시작 (전체 사용)';
+  } else {
+    sheetPickerInfo.innerHTML = `<b>${labelStartSlot}번</b>부터 시작 (${146-labelStartSlot}칸 사용 가능)`;
+  }
+  sheetSlotInput.value = labelStartSlot > 1 ? labelStartSlot : '';
+}
+
+function setLabelStartSlot(slot){
+  slot = Math.min(145, Math.max(1, Math.round(slot) || 1));
+  labelStartSlot = slot;
+  renderSheetGrid();
+}
+
+sheetPickerReset.addEventListener('click', ()=> setLabelStartSlot(1));
+sheetSlotApply.addEventListener('click', ()=> setLabelStartSlot(Number(sheetSlotInput.value) || 1));
+sheetSlotInput.addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter') setLabelStartSlot(Number(sheetSlotInput.value) || 1);
+});
+
+buildSheetGrid();
+
+// 시작 위치를 반영해서 페이지 배열 생성: 첫 페이지는 (시작번호-1)칸을 건너뛰고 채움, 이후 페이지는 새 라벨지로 간주해 1번부터
+function paginateLabelSeq(seq, startSlot, perPage){
+  const pages = [];
+  const firstCapacity = Math.max(0, perPage - (startSlot - 1));
+  const firstPage = new Array(startSlot - 1).fill(null).concat(seq.slice(0, firstCapacity));
+  pages.push(firstPage);
+  let idx = firstCapacity;
+  while(idx < seq.length){
+    pages.push(seq.slice(idx, idx + perPage));
+    idx += perPage;
+  }
+  return pages;
+}
+
 btnLabel.addEventListener('click', async ()=>{
   if(!labelSeq || !parsedRows) return;
   btnLabel.disabled = true;
   try{
     const colorInfo = computeNameColors(parsedRows);
     const wb = new ExcelJS.Workbook();
-    const pageCount = Math.max(1, Math.ceil(labelSeq.length / LABEL_PER_PAGE));
-    for(let p=0; p<pageCount; p++){
+    const pages = paginateLabelSeq(labelSeq, labelStartSlot, LABEL_PER_PAGE);
+    pages.forEach((pageItems, p)=>{
       const ws = wb.addWorksheet(`--${p+1}--`);
-      const pageItems = labelSeq.slice(p*LABEL_PER_PAGE, (p+1)*LABEL_PER_PAGE);
       buildLabelSheet(ws, pageItems, colorInfo);
-    }
+    });
     await downloadWorkbook(wb, `라벨_${todayTag()}.xlsx`, LABEL_DEFAULT_FONT_XML);
   }catch(err){
     console.error(err);
