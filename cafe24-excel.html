@@ -154,11 +154,49 @@
     padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer;
   }
 
+  .bundle-box{
+    margin-top:14px;padding:14px 16px;background:#fff8e6;border:1px solid #f0d98c;border-radius:10px;
+  }
+  .bundle-box-head{
+    display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;
+    font-size:13px;font-weight:700;color:#8a6a10;
+  }
+  #bundleText{
+    width:100%;min-height:90px;padding:10px;border:1px solid var(--line);border-radius:8px;
+    font-size:13px;font-family:inherit;line-height:1.7;resize:vertical;background:#fff;color:var(--ink);
+  }
+
+  .modal-overlay{
+    display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);
+    align-items:center;justify-content:center;z-index:100;
+  }
+  .modal-overlay.show{display:flex;}
+  .modal{
+    background:#fff;border-radius:14px;padding:26px 24px;max-width:380px;width:90%;
+    text-align:center;
+  }
+  .modal .icon{font-size:32px;margin-bottom:8px;}
+  .modal h2{font-size:16px;margin:0 0 8px;}
+  .modal p{font-size:13.5px;color:var(--muted);line-height:1.6;margin:0 0 18px;word-break:keep-all;}
+  .modal button{
+    border:none;background:var(--accent);color:#fff;border-radius:8px;
+    padding:10px 20px;font-size:13.5px;font-weight:700;cursor:pointer;
+  }
+
   footer{text-align:center;color:var(--muted);font-size:12px;margin-top:24px;line-height:1.7;}
 </style>
 </head>
 <body>
 <div class="wrap">
+
+<div class="modal-overlay" id="bundleModal">
+  <div class="modal">
+    <div class="icon">📦</div>
+    <h2>묶음배송 가능 고객</h2>
+    <p id="bundleModalDesc"></p>
+    <button id="bundleModalClose">확인</button>
+  </div>
+</div>
 
   <header>
     <a href="cafe24.html" style="display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:#6b7280;text-decoration:none;margin-bottom:10px;">← CAFE24 메뉴로 돌아가기</a>
@@ -203,6 +241,14 @@
     </div>
     <button class="btn" id="btnConvert" disabled>📄 1단계 · 변환된 파일 다운로드</button>
     <button class="btn btn-secondary" id="btnCourier" disabled>📦 2단계 · 택배 발송용 파일 다운로드</button>
+
+    <div class="bundle-box" id="bundleBox" style="display:none;">
+      <div class="bundle-box-head">
+        <span>📋 묶음배송 가능 고객</span>
+        <span class="btn-ghost btn btn-small" id="btnCopyBundle">복사</span>
+      </div>
+      <textarea id="bundleText" readonly></textarea>
+    </div>
 
     <div class="sheet-picker-toggle" id="sheetPickerToggle">
       🏷️ 라벨지 시작 위치 지정하기 (이미 일부 사용한 라벨지 재사용) <span id="sheetPickerToggleArrow">▾</span>
@@ -283,6 +329,7 @@ function resetAll(){
   btnConvert.disabled = true;
   btnCourier.disabled = true;
   btnLabel.disabled = true;
+  document.getElementById('bundleBox').style.display = 'none';
 }
 
 function setStatus(msg, kind){
@@ -520,8 +567,9 @@ function computeHighlights(rows){
 
   const blueRows = new Set();
   const yellowRows = new Set();
+  const yellowSummary = []; // [{name, count}] 묶음배송 가능(이름+주소 같고 주문번호 다름) 요약
 
-  byName.forEach((idxs)=>{
+  byName.forEach((idxs, name)=>{
     if(idxs.length < 2) return;
     const byAddr = new Map();
     idxs.forEach(i=>{
@@ -530,14 +578,17 @@ function computeHighlights(rows){
       byAddr.get(addr).push(i);
     });
     byAddr.forEach(addrIdxs=>{
-      if(addrIdxs.length >= 2) addrIdxs.forEach(i => yellowRows.add(i));
+      if(addrIdxs.length >= 2){
+        addrIdxs.forEach(i => yellowRows.add(i));
+        yellowSummary.push({ name, count: addrIdxs.length });
+      }
     });
     if(byAddr.size > 1){
       idxs.forEach(i=>{ if(!yellowRows.has(i)) blueRows.add(i); });
     }
   });
 
-  return { blueRows, yellowRows };
+  return { blueRows, yellowRows, yellowSummary };
 }
 
 // ---- 블랙리스트 연동 (구글 시트, cafe24-blacklist.html과 같은 저장소 URL 공유) ----
@@ -806,6 +857,41 @@ btnConvert.addEventListener('click', async ()=>{
   }
 });
 
+const bundleBox = document.getElementById('bundleBox');
+const bundleText = document.getElementById('bundleText');
+const bundleModal = document.getElementById('bundleModal');
+const bundleModalDesc = document.getElementById('bundleModalDesc');
+
+document.getElementById('bundleModalClose').addEventListener('click', ()=>{
+  bundleModal.classList.remove('show');
+});
+
+document.getElementById('btnCopyBundle').addEventListener('click', async ()=>{
+  try{
+    await navigator.clipboard.writeText(bundleText.value);
+    const btn = document.getElementById('btnCopyBundle');
+    const orig = btn.textContent;
+    btn.textContent = '복사됨!';
+    setTimeout(()=>{ btn.textContent = orig; }, 1500);
+  }catch(err){
+    bundleText.select();
+    document.execCommand('copy');
+  }
+});
+
+// 묶음배송 가능(이름+주소 같고 주문번호 다름) 고객 요약을 팝업(콤마 구분)과 복사상자(한 줄씩)에 표시
+function showBundleSummary(yellowSummary){
+  if(!yellowSummary || yellowSummary.length === 0){
+    bundleBox.style.display = 'none';
+    return;
+  }
+  bundleBox.style.display = 'block';
+  bundleText.value = yellowSummary.map(g => `${g.name} 묶음 ${g.count}건`).join('\n');
+
+  bundleModalDesc.textContent = yellowSummary.map(g => `${g.name} 묶음 ${g.count}건`).join(', ');
+  bundleModal.classList.add('show');
+}
+
 btnCourier.addEventListener('click', async ()=>{
   if(!courierRows) return;
   btnCourier.disabled = true;
@@ -842,7 +928,7 @@ btnCourier.addEventListener('click', async ()=>{
 
     ws.columns.forEach((col, i)=>{ col.width = [22,10,42,16,16,20,7,10,14,20,10,10,12,16,16,42][i] || 16; });
 
-    const { blueRows, yellowRows } = computeHighlights(allCourierRows);
+    const { blueRows, yellowRows, yellowSummary } = computeHighlights(allCourierRows);
     const blacklistRows = computeBlacklistMatches(allCourierRows, blacklistItems);
     const skyBlue = {type:'pattern', pattern:'solid', fgColor:{argb:'FFADD8E6'}};
     const yellow = {type:'pattern', pattern:'solid', fgColor:{argb:'FFFFFF00'}};
@@ -877,6 +963,8 @@ btnCourier.addEventListener('click', async ()=>{
     const blCount = blacklistRows.size;
     const extraNote = extraCourierRows.length > 0 ? `, 추가배송 ${extraCourierRows.length}건 포함` : '';
     setStatus((blCount > 0 ? `택배 발송용 파일 생성 완료 (블랙리스트/경계대상 ${blCount}건 발견${extraNote})` : `택배 발송용 파일 생성 완료${extraNote}`), 'ok');
+
+    showBundleSummary(yellowSummary);
     await downloadWorkbook(wb, `택배발송_${todayTag()}.xlsx`);
   }catch(err){
     console.error(err);
