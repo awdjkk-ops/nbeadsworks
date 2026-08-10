@@ -177,7 +177,7 @@
   }
   .modal .icon{font-size:32px;margin-bottom:8px;}
   .modal h2{font-size:16px;margin:0 0 8px;}
-  .modal p{font-size:13.5px;color:var(--muted);line-height:1.6;margin:0 0 18px;word-break:keep-all;}
+  .modal p{font-size:13.5px;color:var(--muted);line-height:1.6;margin:0 0 18px;word-break:keep-all;white-space:pre-line;text-align:left;}
   .modal button{
     border:none;background:var(--accent);color:#fff;border-radius:8px;
     padding:10px 20px;font-size:13.5px;font-weight:700;cursor:pointer;
@@ -544,7 +544,9 @@ function buildCourierRows(rows){
   rows.forEach(r=>{
     const recipient = trimVal(r,'수령인');
     const zip = normalizeZip(trimVal(r,'우편번호'));
-    const address = trimVal(r,'주소').replace(/~/g, '-'); // 롯데택배 송장 시스템이 '~'를 인식 못해서 '-'로 치환
+    const rawAddress = trimVal(r,'주소');
+    const address = rawAddress.replace(/~/g, '-'); // 롯데택배 송장 시스템이 '~'를 인식 못해서 '-'로 치환
+    const addressChanged = rawAddress.includes('~');
     const tel1 = trimVal(r,'전화번호');
     const tel2 = trimVal(r,'핸드폰');
     const orderNo = trimVal(r,'주문번호');
@@ -552,9 +554,14 @@ function buildCourierRows(rows){
     const key = [recipient, zip, address, tel1, tel2, orderNo].join('|');
     if(seen.has(key)) return;
     seen.add(key);
-    out.push({ recipient, zip, address, tel1, tel2, orderNo, note });
+    out.push({ recipient, zip, address, tel1, tel2, orderNo, note, addressChanged });
   });
   return out;
+}
+
+function isJejuAddress(address){
+  const s = String(address ?? '');
+  return s.includes('제주') || s.includes('서귀포');
 }
 
 // 동명이인(이름 같고 주소 다름) → 이름 칸 하늘색 / 이름+주소 같은 사람(진짜 중복) → 이름+주소 칸 노란색
@@ -879,16 +886,34 @@ document.getElementById('btnCopyBundle').addEventListener('click', async ()=>{
   }
 });
 
-// 묶음배송 가능(이름+주소 같고 주문번호 다름) 고객 요약을 팝업(콤마 구분)과 복사상자(한 줄씩)에 표시
-function showBundleSummary(yellowSummary){
-  if(!yellowSummary || yellowSummary.length === 0){
+// 묶음배송 가능/제주도 배송/주소 물결표시(~) 변경 3가지를 각각 섹션으로 나눠서 팝업(섹션별 콤마 구분)과 복사상자(섹션별 줄바꿈)에 표시
+function showBundleSummary(yellowSummary, jejuNames, tildeNames){
+  const hasAny = (yellowSummary && yellowSummary.length) || (jejuNames && jejuNames.length) || (tildeNames && tildeNames.length);
+  if(!hasAny){
     bundleBox.style.display = 'none';
     return;
   }
   bundleBox.style.display = 'block';
-  bundleText.value = yellowSummary.map(g => `${g.name} 묶음 ${g.count}건`).join('\n');
 
-  bundleModalDesc.textContent = yellowSummary.map(g => `${g.name} 묶음 ${g.count}건`).join(', ');
+  const boxParts = [];
+  const modalParts = [];
+
+  if(yellowSummary && yellowSummary.length){
+    const lines = yellowSummary.map(g => `${g.name} 묶음 ${g.count}건`);
+    boxParts.push('[묶음배송 가능]\n' + lines.join('\n'));
+    modalParts.push('묶음배송: ' + lines.join(', '));
+  }
+  if(jejuNames && jejuNames.length){
+    boxParts.push('[제주도 배송]\n' + jejuNames.join('\n'));
+    modalParts.push('제주도: ' + jejuNames.join(', '));
+  }
+  if(tildeNames && tildeNames.length){
+    boxParts.push('[주소 물결표시(~) 변경됨]\n' + tildeNames.join('\n'));
+    modalParts.push('주소변경: ' + tildeNames.join(', '));
+  }
+
+  bundleText.value = boxParts.join('\n\n');
+  bundleModalDesc.textContent = modalParts.join('\n');
   bundleModal.classList.add('show');
 }
 
@@ -907,7 +932,7 @@ btnCourier.addEventListener('click', async ()=>{
     }
     const extraCourierRows = extraItems.map(it => ({
       recipient: it.name, zip: it.zip, address: String(it.address ?? '').replace(/~/g, '-'), tel1: it.tel1, tel2: it.tel2,
-      orderNo: it.memo || '추가배송', note: it.message || '0'
+      orderNo: it.memo || '추가배송', note: it.message || '0', addressChanged: String(it.address ?? '').includes('~')
     }));
     const allCourierRows = courierRows.concat(extraCourierRows);
 
@@ -964,7 +989,11 @@ btnCourier.addEventListener('click', async ()=>{
     const extraNote = extraCourierRows.length > 0 ? `, 추가배송 ${extraCourierRows.length}건 포함` : '';
     setStatus((blCount > 0 ? `택배 발송용 파일 생성 완료 (블랙리스트/경계대상 ${blCount}건 발견${extraNote})` : `택배 발송용 파일 생성 완료${extraNote}`), 'ok');
 
-    showBundleSummary(yellowSummary);
+    showBundleSummary(
+      yellowSummary,
+      allCourierRows.filter(r => isJejuAddress(r.address)).map(r => r.recipient),
+      allCourierRows.filter(r => r.addressChanged).map(r => r.recipient)
+    );
     await downloadWorkbook(wb, `택배발송_${todayTag()}.xlsx`);
   }catch(err){
     console.error(err);
