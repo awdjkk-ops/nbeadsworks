@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>쿠팡 택배 발송용 파일 생성 도구</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  :root{
+    --ink:#22262b;
+    --muted:#6b7280;
+    --bg:#f4f2ee;
+    --card:#ffffff;
+    --accent:#a8425c;
+    --accent-dark:#7f2f45;
+    --teal:#3a5a63;
+    --line:#e4e0d8;
+    --good:#2f7d5a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    padding:32px 16px 64px;
+  }
+  .wrap{max-width:720px;margin:0 auto;}
+  a.back{
+    display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:var(--muted);
+    text-decoration:none;margin-bottom:16px;
+  }
+  header{margin-bottom:28px;}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:12px;letter-spacing:.06em;color:var(--accent-dark);
+    background:#f3e3e7;padding:4px 10px;border-radius:20px;
+    font-weight:600;
+  }
+  h1{font-size:25px;margin:14px 0 6px;letter-spacing:-.01em;}
+  .sub{color:var(--muted);font-size:14.5px;line-height:1.6;margin:0;}
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:24px;
+    margin-bottom:18px;
+  }
+  .step-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+  .step-num{
+    width:26px;height:26px;border-radius:50%;
+    background:var(--teal);color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;font-weight:700;flex:none;
+  }
+  .step-title{font-size:16px;font-weight:700;}
+
+  .drop{
+    border:1.5px dashed #c9c2b4;border-radius:10px;padding:28px 16px;
+    text-align:center;cursor:pointer;transition:border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.drag{border-color:var(--accent);background:#fbf3f5;}
+  .drop input{display:none;}
+  .drop .big{font-size:14.5px;font-weight:600;margin-bottom:4px;}
+  .drop .small{font-size:12.5px;color:var(--muted);}
+
+  .filepill{
+    display:inline-flex;align-items:center;gap:8px;
+    background:#eef0ee;border-radius:8px;padding:8px 12px;
+    font-size:13.5px;margin-top:12px;
+  }
+  .filepill .x{cursor:pointer;color:var(--muted);font-weight:700;}
+
+  .status{margin-top:14px;font-size:13.5px;padding:10px 12px;border-radius:8px;display:none;line-height:1.55;}
+  .status.show{display:block;}
+  .status.ok{background:#eaf5ef;color:var(--good);}
+  .status.err{background:#fbeceb;color:#a4342a;}
+  .status.busy{background:#eef1f6;color:var(--teal);}
+
+  .summary{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:16px;}
+  .stat{background:#f7f6f2;border-radius:10px;padding:12px 14px;}
+  .stat .num{font-size:20px;font-weight:800;color:var(--accent-dark);}
+  .stat .lbl{font-size:12px;color:var(--muted);margin-top:2px;}
+
+  .btn{
+    width:100%;border:none;border-radius:10px;padding:14px 16px;
+    font-size:14.5px;font-weight:700;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    background:var(--accent);color:#fff;margin-top:18px;
+    transition:opacity .15s, transform .1s;
+  }
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn:not(:disabled):hover{transform:translateY(-1px);}
+
+  .reset-link{
+    display:inline-block;margin-top:12px;font-size:12.5px;color:var(--muted);
+    text-decoration:underline;cursor:pointer;
+  }
+  footer{text-align:center;color:var(--muted);font-size:12px;margin-top:24px;line-height:1.7;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="coupang.html">← 쿠팡 메뉴로 돌아가기</a>
+  <header>
+    <span class="eyebrow">쿠팡 · 택배 발송용 파일</span>
+    <h1>원본 배송 파일 → 택배 발송용 파일</h1>
+    <p class="sub">쿠팡에서 내려받은 원본 배송 파일(DeliveryList) 하나만 올리면, 롯데택배 송장 등록용 파일을 자동으로 만들어드려요. 파일은 브라우저 안에서만 처리되고 서버로 전송되지 않아요.</p>
+  </header>
+
+  <div class="card">
+    <div class="step-head">
+      <div class="step-num">1</div>
+      <div class="step-title">원본 배송 파일 업로드</div>
+    </div>
+
+    <div class="drop" id="dropzone">
+      <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+      <div class="big">클릭하거나 파일을 끌어다 놓으세요</div>
+      <div class="small">.xlsx 또는 .csv — 쿠팡 DeliveryList 원본 그대로</div>
+    </div>
+
+    <div id="filepillWrap"></div>
+    <div class="status" id="status"></div>
+
+    <div class="summary" id="summary" style="display:none;">
+      <div class="stat"><div class="num" id="statLines">0</div><div class="lbl">원본 줄 수</div></div>
+      <div class="stat"><div class="num" id="statOut">0</div><div class="lbl">출력 행 수</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="step-head">
+      <div class="step-num">2</div>
+      <div class="step-title">결과 파일 다운로드</div>
+    </div>
+    <button class="btn" id="btnCourier" disabled>📦 택배 발송용 파일 다운로드</button>
+    <span class="reset-link" id="resetLink">다른 파일로 다시 시작</span>
+  </div>
+
+  <footer>
+    원본의 줄(라인) 하나하나가 그대로 출력 행 하나가 돼요 (묶음배송 안에 상품이 여러 개면 그만큼 여러 줄로 출력) · "상품명(옵션명)" 칸에는 실제 상품명이 아니라 <b>묶음배송번호</b>가 들어가요 · 전화번호1·2는 동일한 수취인전화번호가 그대로 들어가요
+  </footer>
+</div>
+
+<script>
+const REQUIRED_COLS = ['묶음배송번호','구매자','수취인전화번호','우편번호','수취인 주소','배송메세지'];
+
+let parsedRows = null;
+let outRows = null;
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const statusEl = document.getElementById('status');
+const filepillWrap = document.getElementById('filepillWrap');
+const summaryEl = document.getElementById('summary');
+const btnCourier = document.getElementById('btnCourier');
+const resetLink = document.getElementById('resetLink');
+
+dropzone.addEventListener('click', ()=> fileInput.click());
+dropzone.addEventListener('dragover', e=>{e.preventDefault(); dropzone.classList.add('drag');});
+dropzone.addEventListener('dragleave', ()=> dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e=>{
+  e.preventDefault();
+  dropzone.classList.remove('drag');
+  if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e=>{
+  if(e.target.files.length) handleFile(e.target.files[0]);
+});
+resetLink.addEventListener('click', resetAll);
+
+function resetAll(){
+  parsedRows = null; outRows = null;
+  fileInput.value = '';
+  filepillWrap.innerHTML = '';
+  summaryEl.style.display = 'none';
+  setStatus('', '');
+  btnCourier.disabled = true;
+}
+
+function setStatus(msg, kind){
+  if(!msg){ statusEl.className='status'; statusEl.textContent=''; return; }
+  statusEl.className = 'status show ' + kind;
+  statusEl.textContent = msg;
+}
+
+function stripBOM(s){ return typeof s === 'string' ? s.replace(/^\uFEFF/,'').trim() : s; }
+function trimVal(r, key){
+  const v = r[key];
+  return (v === undefined || v === null) ? '' : String(v).trim();
+}
+function normalizeZip(z){
+  const s = String(z ?? '').trim();
+  return /^\d+$/.test(s) ? String(parseInt(s, 10)) : s;
+}
+
+async function handleFile(file){
+  filepillWrap.innerHTML = `<div class="filepill">📄 ${file.name} <span class="x" title="제거">✕</span></div>`;
+  filepillWrap.querySelector('.x').addEventListener('click', resetAll);
+  setStatus('파일을 읽는 중...', 'busy');
+  btnCourier.disabled = true;
+  summaryEl.style.display = 'none';
+
+  try{
+    const ext = file.name.split('.').pop().toLowerCase();
+    let rows = ext === 'csv' ? await parseCSV(file) : await parseXLSX(file);
+
+    rows = rows.map(r=>{
+      const clean = {};
+      Object.keys(r).forEach(k=>{ clean[stripBOM(k)] = r[k]; });
+      return clean;
+    }).filter(r => Object.values(r).some(v => v !== undefined && v !== null && String(v).trim() !== ''));
+
+    const headerKeys = rows.length ? Object.keys(rows[0]) : [];
+    const missing = REQUIRED_COLS.filter(c => !headerKeys.includes(c));
+    if(missing.length){
+      setStatus(`원본 파일에서 다음 컬럼을 찾을 수 없어요: ${missing.join(', ')}`, 'err');
+      return;
+    }
+
+    parsedRows = rows;
+    outRows = buildCourierRows(rows);
+
+    document.getElementById('statLines').textContent = rows.length.toLocaleString();
+    document.getElementById('statOut').textContent = outRows.length.toLocaleString();
+    summaryEl.style.display = 'grid';
+
+    setStatus(`처리 완료! 원본 ${rows.length.toLocaleString()}줄 → ${outRows.length.toLocaleString()}행. 아래에서 다운로드하세요.`, 'ok');
+    btnCourier.disabled = false;
+  }catch(err){
+    console.error(err);
+    setStatus('파일을 읽는 중 오류가 발생했어요: ' + err.message, 'err');
+  }
+}
+
+function parseCSV(file){
+  return new Promise((resolve, reject)=>{
+    Papa.parse(file, {
+      header:true, skipEmptyLines:true, encoding:'UTF-8',
+      complete: res => resolve(res.data),
+      error: err => reject(err)
+    });
+  });
+}
+
+async function parseXLSX(file){
+  const buf = await file.arrayBuffer();
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const ws = wb.worksheets[0];
+  const headers = [];
+  const rows = [];
+  ws.eachRow((row, rowNumber)=>{
+    const vals = row.values;
+    if(rowNumber === 1){
+      for(let c=1;c<vals.length;c++) headers[c-1] = stripBOM(String(vals[c] ?? '').trim());
+    } else {
+      const obj = {};
+      for(let c=1;c<vals.length;c++){
+        let v = vals[c];
+        if(v && v.text !== undefined) v = v.text;
+        if(v instanceof Date) v = v.toISOString().slice(0,10);
+        obj[headers[c-1]] = v === undefined || v === null ? '' : v;
+      }
+      rows.push(obj);
+    }
+  });
+  return rows;
+}
+
+// ---- 원본 라인아이템 → 택배 발송용 행 (합치지 않고 줄마다 그대로 출력) ----
+const SENDER = {
+  name: '엔비즈', tel1: '031-911-6512', tel2: '031-911-6512',
+  addr: '서울 서초구 양재동 230, 롯데택배 양재대리점1 엔비즈'
+};
+
+function buildCourierRows(rows){
+  return rows.map(r=>{
+    const recipient = trimVal(r,'구매자');
+    const zip = normalizeZip(trimVal(r,'우편번호'));
+    const address = trimVal(r,'수취인 주소');
+    const tel = trimVal(r,'수취인전화번호');
+    const bundleNo = trimVal(r,'묶음배송번호');
+    const note = trimVal(r,'배송메세지');
+    return { recipient, zip, address, tel1: tel, tel2: tel, bundleNo, note };
+  });
+}
+
+function todayTag(){
+  const d = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
+
+async function downloadWorkbook(wb, filename){
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 2000);
+}
+
+const COURIER_HEADERS = [
+  '받는분성명','받는분우편번호','받는분주소(전체, 분할)','받는분전화번호1','받는분전화번호2',
+  '상품명(옵션명)','수량','사용안함','사용안함','배송메세지1','운임구분','기본운임',
+  '보내는분성명','보내는분전화번호1','보내는분전화번호2','보내는분주소(전체,분할)'
+];
+
+btnCourier.addEventListener('click', async ()=>{
+  if(!outRows) return;
+  btnCourier.disabled = true;
+  try{
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('sheet1');
+    ws.addRow(COURIER_HEADERS);
+    ws.getRow(1).font = {bold:true};
+    ws.getRow(1).alignment = {wrapText:true, vertical:'middle', horizontal:'center'};
+
+    outRows.forEach(r=>{
+      ws.addRow([
+        r.recipient, r.zip, r.address, r.tel1, r.tel2,
+        r.bundleNo, 1, null, null, r.note,
+        '신용', null, SENDER.name, SENDER.tel1, SENDER.tel2, SENDER.addr
+      ]);
+    });
+
+    ws.columns.forEach((col, i)=>{ col.width = [10,10,45,16,16,20,7,10,10,16,8,8,10,16,16,42][i] || 16; });
+
+    await downloadWorkbook(wb, `쿠팡_택배발송_${todayTag()}.xlsx`);
+  }catch(err){
+    console.error(err);
+    alert('파일 생성 중 오류: ' + err.message);
+  }finally{
+    btnCourier.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

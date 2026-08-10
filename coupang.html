@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>쿠팡 - 준비 중</title>
+<title>쿠팡 - 메뉴</title>
 <style>
   :root{
     --ink:#22262b;
@@ -12,6 +12,7 @@
     --card:#ffffff;
     --accent:#a8425c;
     --accent-dark:#7f2f45;
+    --teal:#3a5a63;
     --line:#e4e0d8;
   }
   *{box-sizing:border-box;}
@@ -22,27 +23,67 @@
     color:var(--ink);
     padding:48px 16px 64px;
   }
-  .wrap{max-width:520px;margin:0 auto;text-align:center;}
+  .wrap{max-width:640px;margin:0 auto;}
   a.back{
     display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:var(--muted);
-    text-decoration:none;margin-bottom:24px;
+    text-decoration:none;margin-bottom:20px;
   }
+  header{margin-bottom:32px;text-align:center;}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:12px;letter-spacing:.06em;color:var(--accent-dark);
+    background:#f3e3e7;padding:4px 10px;border-radius:20px;
+    font-weight:600;
+  }
+  h1{font-size:26px;margin:14px 0 6px;letter-spacing:-.01em;}
+  .sub{color:var(--muted);font-size:14.5px;line-height:1.6;margin:0;}
+
+  .grid{
+    display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:32px;
+  }
+  @media (max-width:520px){ .grid{grid-template-columns:1fr;} }
+
   .card{
-    background:var(--card);border:1px solid var(--line);border-radius:16px;
-    padding:48px 28px;
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:28px 22px;
+    text-decoration:none;
+    color:var(--ink);
+    display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;
+    transition:transform .15s, box-shadow .15s, border-color .15s;
   }
-  .icon{font-size:40px;margin-bottom:12px;}
-  h1{font-size:20px;margin:0 0 10px;}
-  p{color:var(--muted);font-size:14px;line-height:1.7;margin:0;}
+  .card:hover{
+    transform:translateY(-3px);
+    box-shadow:0 8px 20px rgba(0,0,0,.06);
+    border-color:var(--accent);
+  }
+  .logo{
+    width:52px;height:52px;border-radius:14px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:24px;
+  }
+  .logo.excel{background:var(--teal);color:#fff;}
+  .logo.blacklist{background:var(--accent);color:#fff;}
+  .card-title{font-size:16px;font-weight:700;}
+  .card-desc{font-size:12.5px;color:var(--muted);line-height:1.5;}
 </style>
 </head>
 <body>
 <div class="wrap">
   <a class="back" href="index.html">← 쇼핑몰 선택으로 돌아가기</a>
-  <div class="card">
-    <div class="icon">🚧</div>
-    <h1>쿠팡 도구는 준비 중이에요</h1>
-    <p>쿠팡 원본 주문 파일 샘플을 주시면<br>CAFE24 도구처럼 만들어드릴 수 있어요.</p>
+  <header>
+    <span class="eyebrow">쿠팡</span>
+    <h1>어떤 작업을 할까요?</h1>
+    <p class="sub">필요한 메뉴를 선택하세요.</p>
+  </header>
+
+  <div class="grid" style="max-width:280px;margin-left:auto;margin-right:auto;">
+    <a href="coupang-excel.html" class="card">
+      <div class="logo excel">📄</div>
+      <div class="card-title">엑셀 변환</div>
+      <div class="card-desc">원본 배송 파일 → 택배 발송용 파일 자동 생성</div>
+    </a>
   </div>
 </div>
 </body>
