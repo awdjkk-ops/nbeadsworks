@@ -304,13 +304,12 @@ function normalizeText(s){
 
 // 동명이인(이름 같고 주소 다름) → 하늘색 / 이름+주소+전화번호 같은데 묶음배송번호가 여러 개 → 노란색(몇 건인지 메모)
 function computeHighlights(rows){
-  const byGroup = new Map(); // "이름||주소||전화" -> Set(묶음배송번호)
+  const byGroup = new Map(); // "이름||주소" -> Set(묶음배송번호) (전화번호는 안심번호처럼 매번 바뀔 수 있어 제외)
   const byName = new Map();  // 이름 -> Set(주소)
   rows.forEach(r=>{
     const name = normalizeText(r.recipient);
     const addr = normalizeText(r.address);
-    const phone = normalizePhone(r.tel1);
-    const key = name + '||' + addr + '||' + phone;
+    const key = name + '||' + addr;
     if(!byGroup.has(key)) byGroup.set(key, new Set());
     byGroup.get(key).add(r.bundleNo);
     if(!byName.has(name)) byName.set(name, new Set());
@@ -324,7 +323,7 @@ function computeHighlights(rows){
 }
 
 function rowGroupKey(r){
-  return normalizeText(r.recipient) + '||' + normalizeText(r.address) + '||' + normalizePhone(r.tel1);
+  return normalizeText(r.recipient) + '||' + normalizeText(r.address);
 }
 
 // ---- 블랙리스트/경계대상 (CAFE24와 같은 구글시트 공유) ----
@@ -365,33 +364,26 @@ function computeBlacklistMatches(rows, blacklistItems){
   const matched = new Map(); // rowIndex -> {level, reasons}
   if(!blacklistItems.length) return matched;
 
+  // 쿠팡은 안심번호(주문마다 바뀌는 임시 번호)를 쓰기 때문에 전화번호는 매칭 기준에서 제외 (이름+주소만)
   const byNameAddr = new Map();
-  const byPhone = new Map();
   blacklistItems.forEach(b=>{
     const name = normalizeText(b.name);
     const addr = normalizeText(b.address);
-    const phone = normalizePhone(b.phone);
     const entry = { level: b.level === '경계대상' ? '경계대상' : '블랙리스트', reason: (b.reason || '').trim() };
     if(name && addr){
       const key = name + '||' + addr;
       if(!byNameAddr.has(key)) byNameAddr.set(key, []);
       byNameAddr.get(key).push(entry);
     }
-    if(phone){
-      if(!byPhone.has(phone)) byPhone.set(phone, []);
-      byPhone.get(phone).push(entry);
-    }
   });
 
   rows.forEach((r, i)=>{
     const name = normalizeText(r.recipient);
     const addr = normalizeText(r.address);
-    const phone = normalizePhone(r.tel1);
 
     const hits = [];
     const nameAddrHits = byNameAddr.get(name + '||' + addr);
     if(nameAddrHits) hits.push(...nameAddrHits);
-    if(phone && byPhone.has(phone)) hits.push(...byPhone.get(phone));
 
     if(hits.length){
       const level = hits.some(h => h.level === '블랙리스트') ? '블랙리스트' : '경계대상';
