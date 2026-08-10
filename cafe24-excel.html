@@ -258,7 +258,7 @@
 
     <div class="bundle-box" id="bundleBoxJeju" style="display:none;">
       <div class="bundle-box-head">
-        <span>🏝️ 제주도 주소 확인</span>
+        <span>🏝️ 제주도 주소 확인 <span style="font-weight:400;font-size:11px;">(주문번호 / 이름 / 전화번호1 / 전화번호2)</span></span>
         <span class="bundle-copy-btn" id="btnCopyJeju">복사</span>
       </div>
       <textarea id="bundleTextJeju" readonly></textarea>
@@ -915,7 +915,8 @@ setupCopyButton('btnCopyJeju', 'bundleTextJeju');
 setupCopyButton('btnCopyTilde', 'bundleTextTilde');
 
 // 묶음배송 가능/제주도 배송/주소 물결표시(~) 변경을 각각 별도 박스에 표시 + 팝업은 섹션별로 요약
-function showBundleSummary(yellowSummary, jejuNames, tildeNames){
+// jejuItems: [{orderNo, name, tel1, tel2}]
+function showBundleSummary(yellowSummary, jejuItems, tildeNames){
   const yellowBox = document.getElementById('bundleBoxYellow');
   const jejuBox = document.getElementById('bundleBoxJeju');
   const tildeBox = document.getElementById('bundleBoxTilde');
@@ -927,9 +928,11 @@ function showBundleSummary(yellowSummary, jejuNames, tildeNames){
     yellowBox.style.display = 'none';
   }
 
-  if(jejuNames && jejuNames.length){
+  if(jejuItems && jejuItems.length){
     jejuBox.style.display = 'block';
-    document.getElementById('bundleTextJeju').value = jejuNames.join('\n');
+    document.getElementById('bundleTextJeju').value = jejuItems
+      .map(it => `${it.orderNo} / ${it.name} / ${it.tel1} / ${it.tel2}`)
+      .join('\n');
   } else {
     jejuBox.style.display = 'none';
   }
@@ -943,7 +946,7 @@ function showBundleSummary(yellowSummary, jejuNames, tildeNames){
 
   const modalParts = [];
   if(yellowSummary && yellowSummary.length) modalParts.push('묶음배송: ' + yellowSummary.map(g => `${g.name} 묶음 ${g.count}건`).join(', '));
-  if(jejuNames && jejuNames.length) modalParts.push('제주도: ' + jejuNames.join(', '));
+  if(jejuItems && jejuItems.length) modalParts.push('제주도: ' + jejuItems.map(it=>it.name).join(', '));
   if(tildeNames && tildeNames.length) modalParts.push('주소변경: ' + tildeNames.join(', '));
 
   if(modalParts.length){
@@ -1026,7 +1029,7 @@ btnCourier.addEventListener('click', async ()=>{
 
     showBundleSummary(
       yellowSummary,
-      allCourierRows.filter(r => isJejuAddress(r.address)).map(r => r.recipient),
+      allCourierRows.filter(r => isJejuAddress(r.address)).map(r => ({ orderNo: r.orderNo, name: r.recipient, tel1: r.tel1, tel2: r.tel2 })),
       allCourierRows.filter(r => r.addressChanged).map(r => r.recipient)
     );
     await downloadWorkbook(wb, `택배발송_${todayTag()}.xlsx`);
