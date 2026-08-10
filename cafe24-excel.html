@@ -161,7 +161,13 @@
     display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;
     font-size:13px;font-weight:700;color:#8a6a10;
   }
-  #bundleText{
+  .bundle-copy-btn{
+    border:none;background:#eceae4;color:var(--ink);border-radius:8px;
+    padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;flex:none;
+    transition:opacity .15s, transform .1s;
+  }
+  .bundle-copy-btn:hover{transform:translateY(-1px);}
+  .bundle-box textarea{
     width:100%;min-height:90px;padding:10px;border:1px solid var(--line);border-radius:8px;
     font-size:13px;font-family:inherit;line-height:1.7;resize:vertical;background:#fff;color:var(--ink);
   }
@@ -242,12 +248,28 @@
     <button class="btn" id="btnConvert" disabled>📄 1단계 · 변환된 파일 다운로드</button>
     <button class="btn btn-secondary" id="btnCourier" disabled>📦 2단계 · 택배 발송용 파일 다운로드</button>
 
-    <div class="bundle-box" id="bundleBox" style="display:none;">
+    <div class="bundle-box" id="bundleBoxYellow" style="display:none;">
       <div class="bundle-box-head">
-        <span>📋 묶음배송 가능 고객</span>
-        <span class="btn-ghost btn btn-small" id="btnCopyBundle">복사</span>
+        <span>📋 묶음배송 확인</span>
+        <span class="bundle-copy-btn" id="btnCopyYellow">복사</span>
       </div>
-      <textarea id="bundleText" readonly></textarea>
+      <textarea id="bundleTextYellow" readonly></textarea>
+    </div>
+
+    <div class="bundle-box" id="bundleBoxJeju" style="display:none;">
+      <div class="bundle-box-head">
+        <span>🏝️ 제주도 주소 확인</span>
+        <span class="bundle-copy-btn" id="btnCopyJeju">복사</span>
+      </div>
+      <textarea id="bundleTextJeju" readonly></textarea>
+    </div>
+
+    <div class="bundle-box" id="bundleBoxTilde" style="display:none;">
+      <div class="bundle-box-head">
+        <span>✏️ 주소에 ~ 특수문자 수정</span>
+        <span class="bundle-copy-btn" id="btnCopyTilde">복사</span>
+      </div>
+      <textarea id="bundleTextTilde" readonly></textarea>
     </div>
 
     <div class="sheet-picker-toggle" id="sheetPickerToggle">
@@ -329,7 +351,9 @@ function resetAll(){
   btnConvert.disabled = true;
   btnCourier.disabled = true;
   btnLabel.disabled = true;
-  document.getElementById('bundleBox').style.display = 'none';
+  document.getElementById('bundleBoxYellow').style.display = 'none';
+  document.getElementById('bundleBoxJeju').style.display = 'none';
+  document.getElementById('bundleBoxTilde').style.display = 'none';
 }
 
 function setStatus(msg, kind){
@@ -864,8 +888,6 @@ btnConvert.addEventListener('click', async ()=>{
   }
 });
 
-const bundleBox = document.getElementById('bundleBox');
-const bundleText = document.getElementById('bundleText');
 const bundleModal = document.getElementById('bundleModal');
 const bundleModalDesc = document.getElementById('bundleModalDesc');
 
@@ -873,48 +895,61 @@ document.getElementById('bundleModalClose').addEventListener('click', ()=>{
   bundleModal.classList.remove('show');
 });
 
-document.getElementById('btnCopyBundle').addEventListener('click', async ()=>{
-  try{
-    await navigator.clipboard.writeText(bundleText.value);
-    const btn = document.getElementById('btnCopyBundle');
+function setupCopyButton(btnId, textareaId){
+  const btn = document.getElementById(btnId);
+  const ta = document.getElementById(textareaId);
+  btn.addEventListener('click', async ()=>{
+    try{
+      await navigator.clipboard.writeText(ta.value);
+    }catch(err){
+      ta.select();
+      document.execCommand('copy');
+    }
     const orig = btn.textContent;
     btn.textContent = '복사됨!';
     setTimeout(()=>{ btn.textContent = orig; }, 1500);
-  }catch(err){
-    bundleText.select();
-    document.execCommand('copy');
-  }
-});
+  });
+}
+setupCopyButton('btnCopyYellow', 'bundleTextYellow');
+setupCopyButton('btnCopyJeju', 'bundleTextJeju');
+setupCopyButton('btnCopyTilde', 'bundleTextTilde');
 
-// 묶음배송 가능/제주도 배송/주소 물결표시(~) 변경 3가지를 각각 섹션으로 나눠서 팝업(섹션별 콤마 구분)과 복사상자(섹션별 줄바꿈)에 표시
+// 묶음배송 가능/제주도 배송/주소 물결표시(~) 변경을 각각 별도 박스에 표시 + 팝업은 섹션별로 요약
 function showBundleSummary(yellowSummary, jejuNames, tildeNames){
-  const hasAny = (yellowSummary && yellowSummary.length) || (jejuNames && jejuNames.length) || (tildeNames && tildeNames.length);
-  if(!hasAny){
-    bundleBox.style.display = 'none';
-    return;
-  }
-  bundleBox.style.display = 'block';
-
-  const boxParts = [];
-  const modalParts = [];
+  const yellowBox = document.getElementById('bundleBoxYellow');
+  const jejuBox = document.getElementById('bundleBoxJeju');
+  const tildeBox = document.getElementById('bundleBoxTilde');
 
   if(yellowSummary && yellowSummary.length){
-    const lines = yellowSummary.map(g => `${g.name} 묶음 ${g.count}건`);
-    boxParts.push('[묶음배송 가능]\n' + lines.join('\n'));
-    modalParts.push('묶음배송: ' + lines.join(', '));
-  }
-  if(jejuNames && jejuNames.length){
-    boxParts.push('[제주도 배송]\n' + jejuNames.join('\n'));
-    modalParts.push('제주도: ' + jejuNames.join(', '));
-  }
-  if(tildeNames && tildeNames.length){
-    boxParts.push('[주소 물결표시(~) 변경됨]\n' + tildeNames.join('\n'));
-    modalParts.push('주소변경: ' + tildeNames.join(', '));
+    yellowBox.style.display = 'block';
+    document.getElementById('bundleTextYellow').value = yellowSummary.map(g => `${g.name} 묶음 ${g.count}건`).join('\n');
+  } else {
+    yellowBox.style.display = 'none';
   }
 
-  bundleText.value = boxParts.join('\n\n');
-  bundleModalDesc.textContent = modalParts.join('\n');
-  bundleModal.classList.add('show');
+  if(jejuNames && jejuNames.length){
+    jejuBox.style.display = 'block';
+    document.getElementById('bundleTextJeju').value = jejuNames.join('\n');
+  } else {
+    jejuBox.style.display = 'none';
+  }
+
+  if(tildeNames && tildeNames.length){
+    tildeBox.style.display = 'block';
+    document.getElementById('bundleTextTilde').value = tildeNames.join('\n');
+  } else {
+    tildeBox.style.display = 'none';
+  }
+
+  const modalParts = [];
+  if(yellowSummary && yellowSummary.length) modalParts.push('묶음배송: ' + yellowSummary.map(g => `${g.name} 묶음 ${g.count}건`).join(', '));
+  if(jejuNames && jejuNames.length) modalParts.push('제주도: ' + jejuNames.join(', '));
+  if(tildeNames && tildeNames.length) modalParts.push('주소변경: ' + tildeNames.join(', '));
+
+  if(modalParts.length){
+    bundleModalDesc.textContent = modalParts.join('\n');
+    bundleModal.classList.add('show');
+  }
 }
 
 btnCourier.addEventListener('click', async ()=>{
