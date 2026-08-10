@@ -141,7 +141,7 @@
   </div>
 
   <footer>
-    원본의 줄(라인) 하나하나가 그대로 출력 행 하나가 돼요 (묶음배송 안에 상품이 여러 개면 그만큼 여러 줄로 출력) · "상품명(옵션명)" 칸에는 실제 상품명이 아니라 <b>묶음배송번호</b>가 들어가요 · 전화번호1·2는 동일한 수취인전화번호가 그대로 들어가요
+    동명이인 = <span style="color:#2a7fb0;font-weight:700;">하늘색</span> , 묶음배송 가능확인 = <span style="color:#b58900;font-weight:700;">노란색</span> , 블랙리스트 = <span style="color:#c0392b;font-weight:700;">빨강</span> , 경계대상 = <span style="color:#1f4e9c;font-weight:700;">파란색</span>
   </footer>
 </div>
 
@@ -278,15 +278,129 @@ const SENDER = {
 };
 
 function buildCourierRows(rows){
-  return rows.map(r=>{
+  const seenBundle = new Set();
+  const out = [];
+  rows.forEach(r=>{
+    const bundleNo = trimVal(r,'묶음배송번호');
+    if(seenBundle.has(bundleNo)) return; // 같은 묶음배송번호는 첫 줄만 사용 (1주문=1행)
+    seenBundle.add(bundleNo);
     const recipient = trimVal(r,'구매자');
     const zip = normalizeZip(trimVal(r,'우편번호'));
     const address = trimVal(r,'수취인 주소');
     const tel = trimVal(r,'수취인전화번호');
-    const bundleNo = trimVal(r,'묶음배송번호');
     const note = trimVal(r,'배송메세지');
-    return { recipient, zip, address, tel1: tel, tel2: tel, bundleNo, note };
+    out.push({ recipient, zip, address, tel1: tel, tel2: tel, bundleNo, note });
   });
+  return out;
+}
+
+// ---- 동명이인 / 묶음배송 여러건 계산 ----
+function normalizePhone(s){
+  return String(s ?? '').replace(/[^0-9]/g, '');
+}
+function normalizeText(s){
+  return String(s ?? '').trim().replace(/[\s\u3000\u00A0\u200B]+/g, '');
+}
+
+// 동명이인(이름 같고 주소 다름) → 하늘색 / 이름+주소+전화번호 같은데 묶음배송번호가 여러 개 → 노란색(몇 건인지 메모)
+function computeHighlights(rows){
+  const byGroup = new Map(); // "이름||주소||전화" -> Set(묶음배송번호)
+  const byName = new Map();  // 이름 -> Set(주소)
+  rows.forEach(r=>{
+    const name = normalizeText(r.recipient);
+    const addr = normalizeText(r.address);
+    const phone = normalizePhone(r.tel1);
+    const key = name + '||' + addr + '||' + phone;
+    if(!byGroup.has(key)) byGroup.set(key, new Set());
+    byGroup.get(key).add(r.bundleNo);
+    if(!byName.has(name)) byName.set(name, new Set());
+    byName.get(name).add(addr);
+  });
+  const yellowCount = new Map(); // key -> 묶음배송번호 개수 (2개 이상일 때만)
+  byGroup.forEach((bundleSet, key)=>{ if(bundleSet.size >= 2) yellowCount.set(key, bundleSet.size); });
+  const blueNames = new Set();
+  byName.forEach((addrSet, name)=>{ if(addrSet.size >= 2) blueNames.add(name); });
+  return { yellowCount, blueNames };
+}
+
+function rowGroupKey(r){
+  return normalizeText(r.recipient) + '||' + normalizeText(r.address) + '||' + normalizePhone(r.tel1);
+}
+
+// ---- 블랙리스트/경계대상 (CAFE24와 같은 구글시트 공유) ----
+const BLACKLIST_STORAGE_KEY = 'blacklist_api_url';
+
+function jsonp(url, params){
+  return new Promise((resolve, reject)=>{
+    const cbName = 'cb_' + Date.now() + '_' + Math.floor(Math.random()*100000);
+    const timer = setTimeout(()=>{ cleanup(); reject(new Error('응답 시간 초과')); }, 15000);
+    function cleanup(){
+      clearTimeout(timer);
+      delete window[cbName];
+      if(script.parentNode) script.parentNode.removeChild(script);
+    }
+    window[cbName] = (data)=>{ cleanup(); resolve(data); };
+    const qs = new URLSearchParams({ ...params, callback: cbName }).toString();
+    const script = document.createElement('script');
+    script.src = url + (url.includes('?') ? '&' : '?') + qs;
+    script.onerror = ()=>{ cleanup(); reject(new Error('네트워크 오류')); };
+    document.body.appendChild(script);
+  });
+}
+
+async function fetchBlacklist(){
+  const apiUrl = localStorage.getItem(BLACKLIST_STORAGE_KEY);
+  if(!apiUrl) return { items: [], connected:false };
+  try{
+    const data = await jsonp(apiUrl, { action:'list' });
+    if(!data.ok) return { items: [], connected:true, error:data.error };
+    return { items: data.items || [], connected:true };
+  }catch(err){
+    return { items: [], connected:true, error: err.message };
+  }
+}
+
+// 이름+주소가 둘 다 일치 OR 전화번호가 일치하면 매칭
+function computeBlacklistMatches(rows, blacklistItems){
+  const matched = new Map(); // rowIndex -> {level, reasons}
+  if(!blacklistItems.length) return matched;
+
+  const byNameAddr = new Map();
+  const byPhone = new Map();
+  blacklistItems.forEach(b=>{
+    const name = normalizeText(b.name);
+    const addr = normalizeText(b.address);
+    const phone = normalizePhone(b.phone);
+    const entry = { level: b.level === '경계대상' ? '경계대상' : '블랙리스트', reason: (b.reason || '').trim() };
+    if(name && addr){
+      const key = name + '||' + addr;
+      if(!byNameAddr.has(key)) byNameAddr.set(key, []);
+      byNameAddr.get(key).push(entry);
+    }
+    if(phone){
+      if(!byPhone.has(phone)) byPhone.set(phone, []);
+      byPhone.get(phone).push(entry);
+    }
+  });
+
+  rows.forEach((r, i)=>{
+    const name = normalizeText(r.recipient);
+    const addr = normalizeText(r.address);
+    const phone = normalizePhone(r.tel1);
+
+    const hits = [];
+    const nameAddrHits = byNameAddr.get(name + '||' + addr);
+    if(nameAddrHits) hits.push(...nameAddrHits);
+    if(phone && byPhone.has(phone)) hits.push(...byPhone.get(phone));
+
+    if(hits.length){
+      const level = hits.some(h => h.level === '블랙리스트') ? '블랙리스트' : '경계대상';
+      const reasons = [...new Set(hits.map(h=>h.reason).filter(Boolean))];
+      matched.set(i, { level, reasons });
+    }
+  });
+
+  return matched;
 }
 
 function todayTag(){
@@ -315,6 +429,12 @@ btnCourier.addEventListener('click', async ()=>{
   if(!outRows) return;
   btnCourier.disabled = true;
   try{
+    setStatus('블랙리스트 확인 중...', 'busy');
+    const { items: blacklistItems, connected, error: blErr } = await fetchBlacklist();
+    if(connected && blErr){
+      console.warn('블랙리스트 조회 실패:', blErr);
+    }
+
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('sheet1');
     ws.addRow(COURIER_HEADERS);
@@ -331,6 +451,41 @@ btnCourier.addEventListener('click', async ()=>{
 
     ws.columns.forEach((col, i)=>{ col.width = [10,10,45,16,16,20,7,10,10,16,8,8,10,16,16,42][i] || 16; });
 
+    const { yellowCount, blueNames } = computeHighlights(outRows);
+    const blacklistRows = computeBlacklistMatches(outRows, blacklistItems);
+    const skyBlue = {type:'pattern', pattern:'solid', fgColor:{argb:'FFADD8E6'}};
+    const yellow = {type:'pattern', pattern:'solid', fgColor:{argb:'FFFFFF00'}};
+    const red = {type:'pattern', pattern:'solid', fgColor:{argb:'FFC0392B'}};
+    const watchBlue = {type:'pattern', pattern:'solid', fgColor:{argb:'FF1F4E9C'}};
+    const whiteFont = {color:{argb:'FFFFFFFF'}, bold:true};
+
+    outRows.forEach((r, i)=>{
+      const sheetRow = i + 2;
+      const nameCell = ws.getCell(sheetRow, 1);
+      const addrCell = ws.getCell(sheetRow, 3);
+      const blMatch = blacklistRows.get(i);
+      const gKey = rowGroupKey(r);
+      const bundleQty = yellowCount.get(gKey);
+
+      if(blMatch){
+        // 블랙리스트/경계대상이 최우선
+        const fill = blMatch.level === '블랙리스트' ? red : watchBlue;
+        nameCell.fill = fill; nameCell.font = whiteFont;
+        addrCell.fill = fill; addrCell.font = whiteFont;
+        if(blMatch.reasons.length){
+          nameCell.note = { texts: [{ text: `[${blMatch.level}] ` + blMatch.reasons.join(' / ') }], margins:{insetmode:'auto'} };
+        }
+      } else if(bundleQty){
+        nameCell.fill = yellow;
+        addrCell.fill = yellow;
+        nameCell.note = { texts: [{ text: `이 고객 별도 주문 ${bundleQty}건 (묶음배송번호 ${bundleQty}개)` }], margins:{insetmode:'auto'} };
+      } else if(blueNames.has(normalizeText(r.recipient))){
+        nameCell.fill = skyBlue;
+      }
+    });
+
+    const blCount = blacklistRows.size;
+    setStatus(blCount > 0 ? `택배 발송용 파일 생성 완료 (블랙리스트/경계대상 ${blCount}건 발견)` : '택배 발송용 파일 생성 완료', 'ok');
     await downloadWorkbook(wb, `쿠팡_택배발송_${todayTag()}.xlsx`);
   }catch(err){
     console.error(err);
