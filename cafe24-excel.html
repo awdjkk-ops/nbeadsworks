@@ -290,6 +290,7 @@
     </div>
 
     <button class="btn btn-secondary" id="btnLabel" disabled>🏷️ 3단계 · 라벨 스티커 파일 다운로드</button>
+    <button class="btn btn-secondary" id="btnLabelPrint" disabled style="margin-top:8px;">🖨️ 3단계 · 라벨 바로 인쇄 (베타)</button>
     <span class="reset-link" id="resetLink">다른 파일로 다시 시작</span>
   </div>
 
@@ -327,6 +328,7 @@ const summaryEl = document.getElementById('summary');
 const btnConvert = document.getElementById('btnConvert');
 const btnCourier = document.getElementById('btnCourier');
 const btnLabel = document.getElementById('btnLabel');
+const btnLabelPrint = document.getElementById('btnLabelPrint');
 const resetLink = document.getElementById('resetLink');
 
 dropzone.addEventListener('click', ()=> fileInput.click());
@@ -351,6 +353,7 @@ function resetAll(){
   btnConvert.disabled = true;
   btnCourier.disabled = true;
   btnLabel.disabled = true;
+  btnLabelPrint.disabled = true;
   document.getElementById('bundleBoxYellow').style.display = 'none';
   document.getElementById('bundleBoxJeju').style.display = 'none';
   document.getElementById('bundleBoxTilde').style.display = 'none';
@@ -371,6 +374,7 @@ async function handleFile(file){
   btnConvert.disabled = true;
   btnCourier.disabled = true;
   btnLabel.disabled = true;
+  btnLabelPrint.disabled = true;
   summaryEl.style.display = 'none';
 
   try{
@@ -407,6 +411,7 @@ async function handleFile(file){
     btnConvert.disabled = false;
     btnCourier.disabled = false;
     btnLabel.disabled = false;
+    btnLabelPrint.disabled = false;
   }catch(err){
     console.error(err);
     setStatus('파일을 읽는 중 오류가 발생했어요: ' + err.message, 'err');
@@ -1121,6 +1126,7 @@ function paginateLabelSeq(seq, startSlot, perPage){
 btnLabel.addEventListener('click', async ()=>{
   if(!labelSeq || !parsedRows) return;
   btnLabel.disabled = true;
+  btnLabelPrint.disabled = true;
   try{
     const colorInfo = computeNameColors(parsedRows);
     const wb = new ExcelJS.Workbook();
@@ -1135,6 +1141,114 @@ btnLabel.addEventListener('click', async ()=>{
     alert('라벨 파일 생성 중 오류: ' + err.message);
   }finally{
     btnLabel.disabled = false;
+    btnLabelPrint.disabled = false;
+  }
+});
+
+// ---- 바로 인쇄 (베타): 엑셀 없이 브라우저에서 바로 인쇄 미리보기 ----
+// 폼텍 3145 실측값(라벨 3cm x 0.9cm, 여백 좌2.1/우0.5/위1.7/아래0.6cm)을 CSS로 그대로 재현
+const PRINT_LABEL_W_CM = 3;
+const PRINT_GAP_W_CM = 0.68;
+const PRINT_LINE1_H_CM = 0.3175;
+const PRINT_LINE2_H_CM = 0.3175;
+const PRINT_WEB_H_CM = 0.2646;
+const PRINT_MARGIN = { top:1.7, right:0.5, bottom:0.6, left:2.1 };
+
+function escapeHtmlPrint(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function buildPrintSlotHTML(item, colorInfo){
+  if(!item) return `<div class="p-slot"></div>`;
+  const fillArgb = item.type === 'NAME' ? nameSlotColor(item, colorInfo) : null;
+  const fillCss = fillArgb ? '#' + fillArgb.slice(2) : 'transparent';
+
+  if(item.type === 'NAME'){
+    return `<div class="p-slot">
+      <div class="p-line2" style="background:${fillCss};">${escapeHtmlPrint(item.text)}</div>
+      <div class="p-web">www.beadsmaker.com</div>
+    </div>`;
+  }
+  if(!item.line2){
+    return `<div class="p-slot">
+      <div class="p-line2">${escapeHtmlPrint(item.line1)}</div>
+      <div class="p-web">www.beadsmaker.com</div>
+    </div>`;
+  }
+  return `<div class="p-slot">
+    <div class="p-line1">${escapeHtmlPrint(item.line1)}</div>
+    <div class="p-opt">${escapeHtmlPrint(item.line2)}</div>
+    <div class="p-web">www.beadsmaker.com</div>
+  </div>`;
+}
+
+function buildPrintPageHTML(pageItems, colorInfo){
+  const cols = [];
+  for(let c=0;c<5;c++){
+    const slots = [];
+    for(let g=0; g<29; g++){
+      slots.push(buildPrintSlotHTML(pageItems[c*29+g], colorInfo));
+    }
+    cols.push(`<div class="p-col">${slots.join('')}</div>`);
+  }
+  return `<div class="p-page">${cols.join('')}</div>`;
+}
+
+function buildPrintDocument(pages, colorInfo){
+  const pagesHTML = pages.map(pageItems => buildPrintPageHTML(pageItems, colorInfo)).join('');
+  return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>라벨 인쇄</title>
+<style>
+  @page{ size:A4; margin:${PRINT_MARGIN.top}cm ${PRINT_MARGIN.right}cm ${PRINT_MARGIN.bottom}cm ${PRINT_MARGIN.left}cm; }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:"돋움","Dotum",sans-serif;}
+  .p-page{
+    display:flex; gap:${PRINT_GAP_W_CM}cm;
+    page-break-after:always;
+  }
+  .p-page:last-child{ page-break-after:auto; }
+  .p-col{ width:${PRINT_LABEL_W_CM}cm; }
+  .p-slot{ width:100%; }
+  .p-line1, .p-line2, .p-opt, .p-web{
+    display:flex; align-items:center; justify-content:center;
+    text-align:center; font-size:6pt; line-height:1.05;
+    overflow:hidden; word-break:break-all;
+  }
+  .p-line1, .p-line2{ height:${PRINT_LINE1_H_CM + PRINT_LINE2_H_CM}cm; }
+  .p-opt{ height:${PRINT_LINE2_H_CM}cm; font-weight:bold; color:#4F81BD; }
+  .p-line1{ height:${PRINT_LINE1_H_CM}cm; }
+  .p-web{ height:${PRINT_WEB_H_CM}cm; background:#BFBFBF; font-weight:bold; }
+</style>
+</head>
+<body>
+${pagesHTML}
+\x3Cscript\x3E
+  window.onload = function(){ window.print(); };
+\x3C/script\x3E
+</body>
+</html>`;
+}
+
+btnLabelPrint.addEventListener('click', ()=>{
+  if(!labelSeq || !parsedRows) return;
+  try{
+    const colorInfo = computeNameColors(parsedRows);
+    const pages = paginateLabelSeq(labelSeq, labelStartSlot, LABEL_PER_PAGE);
+    const html = buildPrintDocument(pages, colorInfo);
+    const printWin = window.open('', '_blank');
+    if(!printWin){
+      alert('팝업이 차단된 것 같아요. 이 사이트의 팝업 차단을 해제해주세요.');
+      return;
+    }
+    printWin.document.open();
+    printWin.document.write(html);
+    printWin.document.close();
+  }catch(err){
+    console.error(err);
+    alert('인쇄 화면 생성 중 오류: ' + err.message);
   }
 });
 </script>
