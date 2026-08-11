@@ -593,29 +593,30 @@ function isJejuAddress(address){
   return s.includes('제주') || s.includes('서귀포');
 }
 
-// 이름+주소 같은 사람(진짜 중복) → 이름+주소 칸 노란색
+// 이름+주소 같은 사람(진짜 중복) → 이름+주소 칸 노란색 (공백 차이는 무시하고 비교)
 function computeHighlights(rows){
   const byName = new Map();
   rows.forEach((r, i)=>{
-    if(!byName.has(r.recipient)) byName.set(r.recipient, []);
-    byName.get(r.recipient).push(i);
+    const nameKey = normalizeText(r.recipient);
+    if(!byName.has(nameKey)) byName.set(nameKey, []);
+    byName.get(nameKey).push(i);
   });
 
   const yellowRows = new Set();
   const yellowSummary = []; // [{name, count}] 묶음배송 가능(이름+주소 같고 주문번호 다름) 요약
 
-  byName.forEach((idxs, name)=>{
+  byName.forEach((idxs)=>{
     if(idxs.length < 2) return;
     const byAddr = new Map();
     idxs.forEach(i=>{
-      const addr = rows[i].address;
-      if(!byAddr.has(addr)) byAddr.set(addr, []);
-      byAddr.get(addr).push(i);
+      const addrKey = normalizeText(rows[i].address);
+      if(!byAddr.has(addrKey)) byAddr.set(addrKey, []);
+      byAddr.get(addrKey).push(i);
     });
     byAddr.forEach(addrIdxs=>{
       if(addrIdxs.length >= 2){
         addrIdxs.forEach(i => yellowRows.add(i));
-        yellowSummary.push({ name, count: addrIdxs.length });
+        yellowSummary.push({ name: rows[addrIdxs[0]].recipient, count: addrIdxs.length });
       }
     });
   });
