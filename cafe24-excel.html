@@ -1152,7 +1152,7 @@ const PRINT_GAP_W_CM = 0.5; // (21cm - 좌2 - 우2 - 라벨5*3) / 간격4개
 const PRINT_LINE1_H_CM = 0.3175;
 const PRINT_LINE2_H_CM = 0.3175;
 const PRINT_WEB_H_CM = 0.2646;
-const PRINT_MARGIN = { top:2.0, right:2.0, bottom:1.6, left:2.0 }; // 상20mm/우20mm/하16mm/좌20mm (실측 확인값)
+const PRINT_MARGIN = { top:1.8, right:2.0, bottom:1.6, left:2.0 }; // 상18mm/우20mm/하16mm/좌20mm
 
 function escapeHtmlPrint(s){
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
