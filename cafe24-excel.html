@@ -1215,19 +1215,19 @@ function buildPrintDocument(pages, colorInfo){
   .p-slot{ width:100%; }
   .p-line1, .p-line2, .p-opt, .p-web{
     display:flex; align-items:flex-start; justify-content:center;
-    text-align:center; font-size:6pt; line-height:1.05;
+    text-align:center; font-size:6pt; line-height:1.25;
     overflow:hidden; word-break:break-all;
   }
-  .p-line1, .p-line2{ height:${PRINT_LINE1_H_CM + PRINT_LINE2_H_CM}cm; }
+  .p-line1, .p-line2{ height:${PRINT_LINE1_H_CM + PRINT_LINE2_H_CM}cm; padding-top:0.4mm; }
   .p-name{ font-size:8pt; font-weight:bold; }
-  /* 상품명(옵션 있을 때 1줄 / 옵션 없을 때도 1줄)은 줄바꿈 없이 앞부분만 한 줄로 잘라서 표시 */
-  .p-line1, .p-line2:not(.p-name){
+  /* 옵션이 있는 경우의 상품명(p-line1)만 줄바꿈 없이 앞부분 1줄로 자름. 옵션이 없는 경우(p-line2)는 원래대로 2줄 줄바꿈 허용 */
+  .p-line1{
     white-space:nowrap; word-break:normal;
     justify-content:flex-start; text-align:left; padding-left:1mm;
+    height:${PRINT_LINE1_H_CM}cm;
   }
-  .p-opt{ height:${PRINT_LINE2_H_CM}cm; font-weight:bold; color:#4F81BD; padding-top:0.6mm; }
-  .p-line1{ height:${PRINT_LINE1_H_CM}cm; }
-  .p-web{ height:${PRINT_WEB_H_CM}cm; background:#BFBFBF; font-weight:bold; }
+  .p-opt{ height:${PRINT_LINE2_H_CM}cm; font-weight:bold; color:#4F81BD; padding-top:1mm; }
+  .p-web{ height:${PRINT_WEB_H_CM}cm; background:#BFBFBF; font-weight:bold; margin-top:0.3mm; }
 </style>
 </head>
 <body>
