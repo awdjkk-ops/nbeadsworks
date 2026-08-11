@@ -294,8 +294,8 @@
   </div>
 
   <footer>
-    2단계 — 기본 = <span style="color:#c2185b;font-weight:700;">분홍</span> , 동명이인 = <span style="color:#2a7fb0;font-weight:700;">하늘색</span> , 묶음배송 가능확인 = <span style="color:#b58900;font-weight:700;">노란색</span> , 블랙리스트 = <span style="color:#c0392b;font-weight:700;">빨강</span> , 경계대상 = <span style="color:#1f4e9c;font-weight:700;">파란색</span><br>
-    3단계 — 기본 = <span style="color:#c2185b;font-weight:700;">분홍</span> , 동명이인 = <span style="color:#2a7fb0;font-weight:700;">하늘색</span> , 묶음배송 가능확인 = <span style="color:#b58900;font-weight:700;">노란색</span>
+    2단계 — 기본 = <span style="color:#c2185b;font-weight:700;">분홍</span> , 묶음배송 가능확인 = <span style="color:#b58900;font-weight:700;">노란색</span> , 블랙리스트 = <span style="color:#c0392b;font-weight:700;">빨강</span> , 경계대상 = <span style="color:#1f4e9c;font-weight:700;">파란색</span><br>
+    3단계 — 기본 = <span style="color:#c2185b;font-weight:700;">분홍</span> , 묶음배송 가능확인 = <span style="color:#b58900;font-weight:700;">노란색</span>
   </footer>
 
 </div>
@@ -588,7 +588,7 @@ function isJejuAddress(address){
   return s.includes('제주') || s.includes('서귀포');
 }
 
-// 동명이인(이름 같고 주소 다름) → 이름 칸 하늘색 / 이름+주소 같은 사람(진짜 중복) → 이름+주소 칸 노란색
+// 이름+주소 같은 사람(진짜 중복) → 이름+주소 칸 노란색
 function computeHighlights(rows){
   const byName = new Map();
   rows.forEach((r, i)=>{
@@ -596,7 +596,6 @@ function computeHighlights(rows){
     byName.get(r.recipient).push(i);
   });
 
-  const blueRows = new Set();
   const yellowRows = new Set();
   const yellowSummary = []; // [{name, count}] 묶음배송 가능(이름+주소 같고 주문번호 다름) 요약
 
@@ -614,12 +613,9 @@ function computeHighlights(rows){
         yellowSummary.push({ name, count: addrIdxs.length });
       }
     });
-    if(byAddr.size > 1){
-      idxs.forEach(i=>{ if(!yellowRows.has(i)) blueRows.add(i); });
-    }
   });
 
-  return { blueRows, yellowRows, yellowSummary };
+  return { yellowRows, yellowSummary };
 }
 
 // ---- 블랙리스트 연동 (구글 시트, cafe24-blacklist.html과 같은 저장소 URL 공유) ----
@@ -775,7 +771,6 @@ function buildLabelSequence(rows){
 // 이름 칸 색상 판단: 기본 분홍 / 동명이인(이름 같고 주소 다름)은 하늘색 / 같은 사람 여러 주문(이름+주소 같고 주문번호 여러개)은 노란색
 function computeNameColors(rows){
   const byNameAddr = new Map(); // "이름||주소" -> Set(주문번호)
-  const byName = new Map();     // 이름 -> Set(주소)
   rows.forEach(r=>{
     const name = trimVal(r,'수령인');
     const addr = trimVal(r,'주소');
@@ -783,19 +778,14 @@ function computeNameColors(rows){
     const key = name + '||' + addr;
     if(!byNameAddr.has(key)) byNameAddr.set(key, new Set());
     byNameAddr.get(key).add(orderNo);
-    if(!byName.has(name)) byName.set(name, new Set());
-    byName.get(name).add(addr);
   });
   const yellowKeys = new Set();
   byNameAddr.forEach((orderSet, key)=>{ if(orderSet.size >= 2) yellowKeys.add(key); });
-  const blueNames = new Set();
-  byName.forEach((addrSet, name)=>{ if(addrSet.size >= 2) blueNames.add(name); });
-  return { yellowKeys, blueNames };
+  return { yellowKeys };
 }
 
 function nameSlotColor(item, colorInfo){
   if(colorInfo.yellowKeys.has(item.groupKey)) return 'FFFFFF00'; // 같은 사람 여러 주문
-  if(colorInfo.blueNames.has(item.text)) return 'FFADD8E6';       // 동명이인
   return 'FFFFC0CB'; // 기본 분홍
 }
 
@@ -991,9 +981,8 @@ btnCourier.addEventListener('click', async ()=>{
 
     ws.columns.forEach((col, i)=>{ col.width = [22,10,42,16,16,20,7,10,14,20,10,10,12,16,16,42][i] || 16; });
 
-    const { blueRows, yellowRows, yellowSummary } = computeHighlights(allCourierRows);
+    const { yellowRows, yellowSummary } = computeHighlights(allCourierRows);
     const blacklistRows = computeBlacklistMatches(allCourierRows, blacklistItems);
-    const skyBlue = {type:'pattern', pattern:'solid', fgColor:{argb:'FFADD8E6'}};
     const yellow = {type:'pattern', pattern:'solid', fgColor:{argb:'FFFFFF00'}};
     const red = {type:'pattern', pattern:'solid', fgColor:{argb:'FFC0392B'}};
     const watchBlue = {type:'pattern', pattern:'solid', fgColor:{argb:'FF1F4E9C'}};
@@ -1003,7 +992,7 @@ btnCourier.addEventListener('click', async ()=>{
       const sheetRow = i + 2;
       const blMatch = blacklistRows.get(i);
       if(blMatch){
-        // 블랙리스트/경계대상 표시가 최우선 (기존 동명이인/중복 표시보다 우선 적용)
+        // 블랙리스트/경계대상 표시가 최우선 (기존 중복 표시보다 우선 적용)
         const fill = blMatch.level === '블랙리스트' ? red : watchBlue;
         const nameCell = ws.getCell(sheetRow, 1);
         const addrCell = ws.getCell(sheetRow, 3);
@@ -1018,8 +1007,6 @@ btnCourier.addEventListener('click', async ()=>{
       } else if(yellowRows.has(i)){
         ws.getCell(sheetRow, 1).fill = yellow; // 받는분성명
         ws.getCell(sheetRow, 3).fill = yellow; // 받는분주소
-      } else if(blueRows.has(i)){
-        ws.getCell(sheetRow, 1).fill = skyBlue; // 받는분성명
       }
     });
 
