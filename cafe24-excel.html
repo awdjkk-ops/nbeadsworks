@@ -272,6 +272,14 @@
       <textarea id="bundleTextTilde" readonly></textarea>
     </div>
 
+    <div class="bundle-box" id="bundleBoxMsg" style="display:none;">
+      <div class="bundle-box-head">
+        <span>⚠️ 중요 배송메세지 확인 <span style="font-weight:400;font-size:11px;">(주문번호 / 배송메세지)</span></span>
+        <span class="bundle-copy-btn" id="btnCopyMsg">복사</span>
+      </div>
+      <textarea id="bundleTextMsg" readonly></textarea>
+    </div>
+
     <div class="sheet-picker-toggle" id="sheetPickerToggle">
       🏷️ 라벨지 시작 위치 지정하기 (이미 일부 사용한 라벨지 재사용) <span id="sheetPickerToggleArrow">▾</span>
     </div>
@@ -357,6 +365,7 @@ function resetAll(){
   document.getElementById('bundleBoxYellow').style.display = 'none';
   document.getElementById('bundleBoxJeju').style.display = 'none';
   document.getElementById('bundleBoxTilde').style.display = 'none';
+  document.getElementById('bundleBoxMsg').style.display = 'none';
 }
 
 function setStatus(msg, kind){
@@ -909,13 +918,15 @@ function setupCopyButton(btnId, textareaId){
 setupCopyButton('btnCopyYellow', 'bundleTextYellow');
 setupCopyButton('btnCopyJeju', 'bundleTextJeju');
 setupCopyButton('btnCopyTilde', 'bundleTextTilde');
+setupCopyButton('btnCopyMsg', 'bundleTextMsg');
 
 // 묶음배송 가능/제주도 배송/주소 물결표시(~) 변경을 각각 별도 박스에 표시 + 팝업은 섹션별로 요약
 // jejuItems: [{orderNo, name, tel1, tel2}]
-function showBundleSummary(yellowSummary, jejuItems, tildeNames){
+function showBundleSummary(yellowSummary, jejuItems, tildeNames, importantMsgItems){
   const yellowBox = document.getElementById('bundleBoxYellow');
   const jejuBox = document.getElementById('bundleBoxJeju');
   const tildeBox = document.getElementById('bundleBoxTilde');
+  const msgBox = document.getElementById('bundleBoxMsg');
 
   if(yellowSummary && yellowSummary.length){
     yellowBox.style.display = 'block';
@@ -940,6 +951,16 @@ function showBundleSummary(yellowSummary, jejuItems, tildeNames){
     tildeBox.style.display = 'none';
   }
 
+  if(importantMsgItems && importantMsgItems.length){
+    msgBox.style.display = 'block';
+    document.getElementById('bundleTextMsg').value = importantMsgItems
+      .map(it => `${it.orderNo} / ${it.message}`)
+      .join('\n');
+  } else {
+    msgBox.style.display = 'none';
+  }
+
+  // 팝업에는 묶음배송/제주도/주소변경만 표시 (중요 배송메세지는 복사 상자에서만 확인)
   const modalParts = [];
   if(yellowSummary && yellowSummary.length) modalParts.push('묶음배송: ' + yellowSummary.map(g => `${g.name} 묶음 ${g.count}건`).join(', '));
   if(jejuItems && jejuItems.length) modalParts.push('제주도: ' + jejuItems.map(it=>it.name).join(', '));
@@ -949,6 +970,14 @@ function showBundleSummary(yellowSummary, jejuItems, tildeNames){
     bundleModalDesc.textContent = modalParts.join('\n');
     bundleModal.classList.add('show');
   }
+}
+
+// 배송메세지가 이 목록과 "정확히" 일치하면(그 외 다른 글자 없음) 중요 메세지로 안 봄
+const TRIVIAL_DELIVERY_MESSAGES = new Set(['문 앞', '문앞', '직접 받고 부재 시 문 앞', '0', '현관', '경비실']);
+function isImportantDeliveryMessage(msg){
+  const trimmed = String(msg ?? '').trim();
+  if(trimmed === '') return false;
+  return !TRIVIAL_DELIVERY_MESSAGES.has(trimmed);
 }
 
 btnCourier.addEventListener('click', async ()=>{
@@ -1023,7 +1052,8 @@ btnCourier.addEventListener('click', async ()=>{
     showBundleSummary(
       yellowSummary,
       allCourierRows.filter(r => isJejuAddress(r.address)).map(r => ({ orderNo: r.orderNo, name: r.recipient, tel1: r.tel1, tel2: r.tel2 })),
-      allCourierRows.filter(r => r.addressChanged).map(r => r.recipient)
+      allCourierRows.filter(r => r.addressChanged).map(r => r.recipient),
+      courierRows.filter(r => isImportantDeliveryMessage(r.note)).map(r => ({ orderNo: r.orderNo, message: r.note }))
     );
     await downloadWorkbook(wb, `택배발송_${todayTag()}.xlsx`);
   }catch(err){
