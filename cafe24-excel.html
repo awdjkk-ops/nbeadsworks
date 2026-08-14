@@ -253,7 +253,7 @@
         <span>📋 묶음배송 확인</span>
         <span class="bundle-copy-btn" id="btnCopyYellow">복사</span>
       </div>
-      <textarea id="bundleTextYellow" readonly></textarea>
+      <textarea id="bundleTextYellow" readonly style="min-height:180px;"></textarea>
     </div>
 
     <div class="bundle-box" id="bundleBoxJeju" style="display:none;">
@@ -612,7 +612,7 @@ function computeHighlights(rows){
   });
 
   const yellowRows = new Set();
-  const yellowSummary = []; // [{name, count}] 묶음배송 가능(이름+주소 같고 주문번호 다름) 요약
+  const yellowSummary = []; // [{name, count, orderNos}] 묶음배송 가능(이름+주소 같고 주문번호 다름) 요약
 
   byName.forEach((idxs)=>{
     if(idxs.length < 2) return;
@@ -625,7 +625,11 @@ function computeHighlights(rows){
     byAddr.forEach(addrIdxs=>{
       if(addrIdxs.length >= 2){
         addrIdxs.forEach(i => yellowRows.add(i));
-        yellowSummary.push({ name: rows[addrIdxs[0]].recipient, count: addrIdxs.length });
+        yellowSummary.push({
+          name: rows[addrIdxs[0]].recipient,
+          count: addrIdxs.length,
+          orderNos: addrIdxs.map(i => rows[i].orderNo)
+        });
       }
     });
   });
@@ -930,7 +934,7 @@ function showBundleSummary(yellowSummary, jejuItems, tildeNames, importantMsgIte
 
   if(yellowSummary && yellowSummary.length){
     yellowBox.style.display = 'block';
-    document.getElementById('bundleTextYellow').value = yellowSummary.map(g => `${g.name} 묶음 ${g.count}건`).join('\n');
+    document.getElementById('bundleTextYellow').value = yellowSummary.map(g => `${g.name} / ${g.count}건 묶음 / ${g.orderNos.join(' / ')}`).join('\n');
   } else {
     yellowBox.style.display = 'none';
   }
