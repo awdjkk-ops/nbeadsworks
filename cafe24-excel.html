@@ -1199,7 +1199,7 @@ function escapeHtmlPrint(s){
 }
 
 function buildPrintSlotHTML(item, colorInfo){
-  if(!item) return `<div class="p-slot"></div>`;
+  if(!item) return `<div class="p-slot" style="height:${PRINT_LINE1_H_CM + PRINT_LINE2_H_CM + PRINT_WEB_H_CM}cm;"></div>`;
   const fillArgb = item.type === 'NAME' ? nameSlotColor(item, colorInfo) : null;
   const fillCss = fillArgb ? '#' + fillArgb.slice(2) : 'transparent';
 
@@ -1247,7 +1247,7 @@ function buildPrintDocument(pages, colorInfo){
   *{-webkit-print-color-adjust:exact; print-color-adjust:exact; color-adjust:exact;}
   body{font-family:"돋움","Dotum",sans-serif;}
   .p-page{
-    display:flex; gap:${PRINT_GAP_W_CM}cm;
+    display:flex; align-items:flex-start; gap:${PRINT_GAP_W_CM}cm;
     page-break-after:always;
   }
   .p-page:last-child{ page-break-after:auto; }
