@@ -421,6 +421,7 @@ async function handleFile(file){
     btnCourier.disabled = false;
     btnLabel.disabled = false;
     btnLabelPrint.disabled = false;
+    runCourierPreview();
   }catch(err){
     console.error(err);
     setStatus('파일을 읽는 중 오류가 발생했어요: ' + err.message, 'err');
@@ -693,6 +694,19 @@ async function fetchAndClearExtraShipping(){
   }
 }
 
+// 미리보기용: 추가배송 항목을 읽기만 하고 삭제하지 않음 (실제 다운로드 시에만 지워야 함)
+async function fetchExtraShippingReadOnly(){
+  const apiUrl = localStorage.getItem(BLACKLIST_STORAGE_KEY);
+  if(!apiUrl) return { items: [], connected:false };
+  try{
+    const data = await jsonp(apiUrl, { action:'listExtra' });
+    if(!data.ok) return { items: [], connected:true, error:data.error };
+    return { items: data.items || [], connected:true };
+  }catch(err){
+    return { items: [], connected:true, error: err.message };
+  }
+}
+
 // 이름+주소가 둘 다 일치 OR 휴대폰이 일치하면 매칭. 등급(블랙리스트/경계대상)과 사유까지 함께 반환.
 // 반환: Map(rowIndex -> { level: '블랙리스트'|'경계대상', reasons: string[] })
 function computeBlacklistMatches(courierRows, blacklistItems){
@@ -926,7 +940,8 @@ setupCopyButton('btnCopyMsg', 'bundleTextMsg');
 
 // 묶음배송 가능/제주도 배송/주소 물결표시(~) 변경을 각각 별도 박스에 표시 + 팝업은 섹션별로 요약
 // jejuItems: [{orderNo, name, tel1, tel2}]
-function showBundleSummary(yellowSummary, jejuItems, tildeNames, importantMsgItems){
+function showBundleSummary(yellowSummary, jejuItems, tildeNames, importantMsgItems, showModal){
+  if(showModal === undefined) showModal = true;
   const yellowBox = document.getElementById('bundleBoxYellow');
   const jejuBox = document.getElementById('bundleBoxJeju');
   const tildeBox = document.getElementById('bundleBoxTilde');
@@ -970,7 +985,7 @@ function showBundleSummary(yellowSummary, jejuItems, tildeNames, importantMsgIte
   if(jejuItems && jejuItems.length) modalParts.push('제주도: ' + jejuItems.map(it=>it.name).join(', '));
   if(tildeNames && tildeNames.length) modalParts.push('주소변경: ' + tildeNames.join(', '));
 
-  if(modalParts.length){
+  if(showModal && modalParts.length){
     bundleModalDesc.textContent = modalParts.join('\n');
     bundleModal.classList.add('show');
   }
@@ -991,24 +1006,39 @@ function isImportantDeliveryMessage(msg){
   return !TRIVIAL_DELIVERY_MESSAGES.has(trimmed);
 }
 
+// 블랙리스트/추가배송/묶음배송/제주도/주소변경/중요배송메세지를 한번에 계산.
+// destructive=true면 추가배송 목록을 읽으면서 동시에 시트에서 삭제(실제 다운로드용), false면 읽기만(미리보기용)
+async function gatherCourierAnalysis(destructive){
+  const { items: blacklistItems, connected, error: blErr } = await fetchBlacklist();
+  if(connected && blErr) console.warn('블랙리스트 조회 실패:', blErr);
+
+  const { items: extraItems, connected: extraConnected, error: extraErr } = destructive
+    ? await fetchAndClearExtraShipping()
+    : await fetchExtraShippingReadOnly();
+  if(extraConnected && extraErr) console.warn('추가배송 조회 실패:', extraErr);
+
+  const extraCourierRows = extraItems.map(it => ({
+    recipient: it.name, zip: it.zip, address: String(it.address ?? '').replace(/~/g, '-'), tel1: it.tel1, tel2: it.tel2,
+    orderNo: it.memo || '추가배송', note: it.message || '0', addressChanged: String(it.address ?? '').includes('~')
+  }));
+  const allCourierRows = courierRows.concat(extraCourierRows);
+
+  const { yellowRows, yellowSummary } = computeHighlights(allCourierRows);
+  const blacklistRows = computeBlacklistMatches(allCourierRows, blacklistItems);
+
+  const jejuItems = allCourierRows.filter(r => isJejuAddress(r.address)).map(r => ({ orderNo: r.orderNo, name: r.recipient, tel1: r.tel1, tel2: r.tel2 }));
+  const tildeNames = allCourierRows.filter(r => r.addressChanged).map(r => r.recipient);
+  const importantMsgItems = courierRows.filter(r => isImportantDeliveryMessage(r.note)).map(r => ({ orderNo: r.orderNo, message: r.note }));
+
+  return { blacklistItems, extraCourierRows, allCourierRows, yellowRows, yellowSummary, blacklistRows, jejuItems, tildeNames, importantMsgItems };
+}
+
 btnCourier.addEventListener('click', async ()=>{
   if(!courierRows) return;
   btnCourier.disabled = true;
   try{
     setStatus('블랙리스트/추가배송 확인 중...', 'busy');
-    const { items: blacklistItems, connected, error: blErr } = await fetchBlacklist();
-    if(connected && blErr){
-      console.warn('블랙리스트 조회 실패:', blErr);
-    }
-    const { items: extraItems, connected: extraConnected, error: extraErr } = await fetchAndClearExtraShipping();
-    if(extraConnected && extraErr){
-      console.warn('추가배송 조회 실패:', extraErr);
-    }
-    const extraCourierRows = extraItems.map(it => ({
-      recipient: it.name, zip: it.zip, address: String(it.address ?? '').replace(/~/g, '-'), tel1: it.tel1, tel2: it.tel2,
-      orderNo: it.memo || '추가배송', note: it.message || '0', addressChanged: String(it.address ?? '').includes('~')
-    }));
-    const allCourierRows = courierRows.concat(extraCourierRows);
+    const { allCourierRows, yellowRows, yellowSummary, blacklistRows, extraCourierRows, jejuItems, tildeNames, importantMsgItems } = await gatherCourierAnalysis(true);
 
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('택배발송');
@@ -1027,8 +1057,6 @@ btnCourier.addEventListener('click', async ()=>{
 
     ws.columns.forEach((col, i)=>{ col.width = [22,10,42,16,16,20,7,10,14,20,10,10,12,16,16,42][i] || 16; });
 
-    const { yellowRows, yellowSummary } = computeHighlights(allCourierRows);
-    const blacklistRows = computeBlacklistMatches(allCourierRows, blacklistItems);
     const yellow = {type:'pattern', pattern:'solid', fgColor:{argb:'FFFFFF00'}};
     const red = {type:'pattern', pattern:'solid', fgColor:{argb:'FFC0392B'}};
     const watchBlue = {type:'pattern', pattern:'solid', fgColor:{argb:'FF1F4E9C'}};
@@ -1060,12 +1088,7 @@ btnCourier.addEventListener('click', async ()=>{
     const extraNote = extraCourierRows.length > 0 ? `, 추가배송 ${extraCourierRows.length}건 포함` : '';
     setStatus((blCount > 0 ? `택배 발송용 파일 생성 완료 (블랙리스트/경계대상 ${blCount}건 발견${extraNote})` : `택배 발송용 파일 생성 완료${extraNote}`), 'ok');
 
-    showBundleSummary(
-      yellowSummary,
-      allCourierRows.filter(r => isJejuAddress(r.address)).map(r => ({ orderNo: r.orderNo, name: r.recipient, tel1: r.tel1, tel2: r.tel2 })),
-      allCourierRows.filter(r => r.addressChanged).map(r => r.recipient),
-      courierRows.filter(r => isImportantDeliveryMessage(r.note)).map(r => ({ orderNo: r.orderNo, message: r.note }))
-    );
+    showBundleSummary(yellowSummary, jejuItems, tildeNames, importantMsgItems, true);
     await downloadWorkbook(wb, `택배발송_${todayTag()}.xlsx`);
   }catch(err){
     console.error(err);
@@ -1074,6 +1097,17 @@ btnCourier.addEventListener('click', async ()=>{
     btnCourier.disabled = false;
   }
 });
+
+// 원본 파일을 올리기만 해도 미리 묶음배송/제주도/주소변경/중요메세지 박스를 보여줌 (추가배송은 삭제 없이 읽기만 함)
+async function runCourierPreview(){
+  if(!courierRows) return;
+  try{
+    const { yellowSummary, jejuItems, tildeNames, importantMsgItems } = await gatherCourierAnalysis(false);
+    showBundleSummary(yellowSummary, jejuItems, tildeNames, importantMsgItems, false);
+  }catch(err){
+    console.warn('미리보기 분석 실패:', err);
+  }
+}
 
 // ---- 라벨지 시작 위치 선택기 (5열x29행, 이미 사용한 칸 건너뛰기) ----
 let labelStartSlot = 1; // 1~145, 이 번호부터 첫 페이지에 채움
