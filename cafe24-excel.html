@@ -114,45 +114,55 @@
     margin-top:10px;padding:16px;background:#f7f6f2;border-radius:10px;
   }
   .sheet-picker-desc{font-size:12.5px;color:var(--muted);line-height:1.6;margin:0 0 12px;}
-  .sheet-grid{
-    display:flex;gap:10px;justify-content:center;
-    background:#fff;border-radius:8px;padding:14px 10px;
+
+  .preview-nav{
+    display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:10px;
   }
-  .sheet-grid-group{display:flex;align-items:stretch;gap:2px;flex:1;max-width:72px;}
-  .sheet-grid-numbers{
+  .preview-nav-btn{
+    border:none;background:var(--teal);color:#fff;border-radius:8px;
+    padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;
+  }
+  .preview-nav-btn:disabled{opacity:.35;cursor:not-allowed;}
+  #previewPageLabel{font-size:13px;font-weight:700;color:var(--ink);min-width:90px;text-align:center;}
+
+  .preview-page{
+    display:flex;gap:6px;justify-content:center;
+    background:#fff;border-radius:8px;padding:10px 8px;
+    user-select:none;
+  }
+  .preview-group{display:flex;align-items:stretch;gap:2px;flex:1;max-width:112px;}
+  .preview-numbers{
     display:flex;flex-direction:column;gap:1.5px;
-    font-size:6px;line-height:1;color:var(--muted);
-    text-align:right;padding-right:2px;width:12px;flex:none;
+    font-size:7px;line-height:1;color:var(--muted);
+    text-align:right;padding-right:2px;width:13px;flex:none;
   }
-  .sheet-grid-numbers span{height:11px;display:flex;align-items:center;justify-content:flex-end;}
-  .sheet-grid-col{display:flex;flex-direction:column;gap:1.5px;flex:1;min-width:0;}
-  .sheet-cell{
-    height:11px;border-radius:1.5px;cursor:pointer;
-    background:var(--accent);opacity:.85;
-    transition:opacity .1s;
+  .preview-numbers span{height:30px;display:flex;align-items:center;justify-content:flex-end;}
+  .preview-col{display:flex;flex-direction:column;gap:1.5px;flex:1;max-width:100px;min-width:0;}
+  .preview-slot{
+    height:30px;border-radius:2px;cursor:pointer;position:relative;
+    background:#f7f6f2;border:1px solid var(--line);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    font-size:6.5px;line-height:1.1;text-align:center;overflow:hidden;
+    padding:1px;
   }
-  .sheet-cell:hover{opacity:1;outline:1px solid var(--accent-dark);}
-  .sheet-cell.used{background:#d8d4ca;cursor:default;}
-  .sheet-cell.used:hover{outline:none;opacity:1;}
+  .preview-slot.filled{border-color:transparent;}
+  .preview-slot .psub{font-weight:700;color:#4F81BD;}
+  .preview-slot.used{
+    background:repeating-linear-gradient(45deg,#c9c2b4,#c9c2b4 4px,#b8b0a0 4px,#b8b0a0 8px);
+    opacity:.9;
+  }
+  .preview-slot.used::after{
+    content:'사용됨';color:#fff;font-weight:800;font-size:8px;
+    text-shadow:0 0 2px rgba(0,0,0,.6);
+  }
+  .preview-slot:hover{outline:2px solid var(--accent-dark);}
+
   .sheet-picker-info{
     display:flex;justify-content:space-between;align-items:center;
     margin-top:10px;font-size:12.5px;color:var(--ink);
   }
   .sheet-picker-info b{color:var(--accent-dark);}
   .sheet-picker-reset{color:var(--muted);text-decoration:underline;cursor:pointer;font-size:12px;}
-  .sheet-picker-number{
-    display:flex;align-items:center;gap:8px;margin-top:12px;
-    font-size:12.5px;color:var(--ink);
-  }
-  .sheet-picker-number input{
-    width:70px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;
-    font-size:13px;font-family:inherit;text-align:center;
-  }
-  .sheet-picker-number input:focus{outline:none;border-color:var(--accent);}
-  .sheet-picker-number button{
-    border:none;background:var(--teal);color:#fff;border-radius:8px;
-    padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer;
-  }
 
   .bundle-box{
     margin-top:14px;padding:14px 16px;background:#fff8e6;border:1px solid #f0d98c;border-radius:10px;
@@ -284,16 +294,19 @@
       🏷️ 라벨지 시작 위치 지정하기 (이미 일부 사용한 라벨지 재사용) <span id="sheetPickerToggleArrow">▾</span>
     </div>
     <div class="sheet-picker-box" id="sheetPickerBox" style="display:none;">
-      <p class="sheet-picker-desc">이미 사용한 칸이 있다면, 실제 라벨지에서 <b>다음으로 인쇄할 첫 칸</b>을 클릭하세요. 클릭한 칸부터 끝까지 첫 페이지에 채워지고, 넘치는 분량은 새 라벨지(1번부터)로 자동으로 넘어가요.</p>
-      <div class="sheet-grid" id="sheetGrid"></div>
-      <div class="sheet-picker-info">
-        <span id="sheetPickerInfo">1번부터 시작 (전체 사용)</span>
-        <span class="sheet-picker-reset" id="sheetPickerReset">처음부터 다시 시작</span>
+      <p class="sheet-picker-desc">실제 인쇄될 내용이 그대로 보여요. 이미 사용한 칸은 <b>클릭하거나 드래그</b>해서 회색으로 표시하면, 그 칸은 건너뛰고 채워져요. 페이지마다 따로 지정할 수 있어요.</p>
+
+      <div class="preview-nav">
+        <button class="preview-nav-btn" id="previewPrevBtn">◀ 이전</button>
+        <span id="previewPageLabel">페이지 1 / 1</span>
+        <button class="preview-nav-btn" id="previewNextBtn">다음 ▶</button>
       </div>
-      <div class="sheet-picker-number">
-        <span>번호로 직접 지정:</span>
-        <input type="number" id="sheetSlotInput" min="1" max="145" placeholder="1~145">
-        <button id="sheetSlotApply">적용</button>
+
+      <div class="preview-page" id="previewPage"></div>
+
+      <div class="sheet-picker-info">
+        <span id="previewPageInfo"></span>
+        <span class="sheet-picker-reset" id="previewPageReset">이 페이지 초기화</span>
       </div>
     </div>
 
@@ -366,6 +379,9 @@ function resetAll(){
   document.getElementById('bundleBoxJeju').style.display = 'none';
   document.getElementById('bundleBoxTilde').style.display = 'none';
   document.getElementById('bundleBoxMsg').style.display = 'none';
+  usedSlotsByPage = {};
+  currentPreviewPage = 0;
+  if(typeof renderPreview === 'function') renderPreview();
 }
 
 function setStatus(msg, kind){
@@ -422,6 +438,9 @@ async function handleFile(file){
     btnLabel.disabled = false;
     btnLabelPrint.disabled = false;
     runCourierPreview();
+    usedSlotsByPage = {};
+    currentPreviewPage = 0;
+    if(typeof renderPreview === 'function') renderPreview();
   }catch(err){
     console.error(err);
     setStatus('파일을 읽는 중 오류가 발생했어요: ' + err.message, 'err');
@@ -1109,31 +1128,78 @@ async function runCourierPreview(){
   }
 }
 
-// ---- 라벨지 시작 위치 선택기 (5열x29행, 이미 사용한 칸 건너뛰기) ----
-let labelStartSlot = 1; // 1~145, 이 번호부터 첫 페이지에 채움
+// ---- 라벨지 시작 위치 선택기 (페이지별로 개별 칸을 클릭/드래그로 "사용됨" 표시) ----
+let usedSlotsByPage = {}; // { 0: Set(3,4,5), 1: Set(...) } - 0-based 페이지 인덱스 -> 사용된 슬롯번호(1~145) 집합
+let currentPreviewPage = 0; // 0-based
 
 const sheetPickerToggle = document.getElementById('sheetPickerToggle');
 const sheetPickerBox = document.getElementById('sheetPickerBox');
-const sheetGrid = document.getElementById('sheetGrid');
-const sheetPickerInfo = document.getElementById('sheetPickerInfo');
-const sheetPickerReset = document.getElementById('sheetPickerReset');
-const sheetSlotInput = document.getElementById('sheetSlotInput');
-const sheetSlotApply = document.getElementById('sheetSlotApply');
+const previewPage = document.getElementById('previewPage');
+const previewPageLabel = document.getElementById('previewPageLabel');
+const previewPageInfo = document.getElementById('previewPageInfo');
+const previewPrevBtn = document.getElementById('previewPrevBtn');
+const previewNextBtn = document.getElementById('previewNextBtn');
+const previewPageReset = document.getElementById('previewPageReset');
 
 sheetPickerToggle.addEventListener('click', ()=>{
   const showing = sheetPickerBox.style.display !== 'none';
   sheetPickerBox.style.display = showing ? 'none' : 'block';
   document.getElementById('sheetPickerToggleArrow').textContent = showing ? '▾' : '▴';
+  if(!showing) renderPreview();
 });
 
-function buildSheetGrid(){
-  sheetGrid.innerHTML = '';
+// 페이지별 사용된 칸을 건너뛰고 라벨 항목을 순서대로 채워서 페이지 배열 생성
+function paginateLabelSeqAdvanced(seq, usedByPage, perPage){
+  const pages = [];
+  let itemIdx = 0;
+  let pageIdx = 0;
+  while(true){
+    const usedSet = usedByPage[pageIdx] || new Set();
+    const page = new Array(perPage).fill(null);
+    for(let slot=1; slot<=perPage; slot++){
+      if(usedSet.has(slot)) continue;
+      if(itemIdx >= seq.length) break;
+      page[slot-1] = seq[itemIdx++];
+    }
+    pages.push(page);
+    pageIdx++;
+    if(itemIdx >= seq.length) break;
+    if(pageIdx > 2000) break; // 무한루프 방지 안전장치
+  }
+  return pages;
+}
+
+function currentColorInfo(){
+  return parsedRows ? computeNameColors(parsedRows) : { yellowKeys: new Set() };
+}
+
+function renderPreview(){
+  if(!labelSeq){
+    previewPage.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12.5px;">먼저 원본 파일을 업로드해주세요.</div>';
+    previewPageLabel.textContent = '페이지 - / -';
+    previewPrevBtn.disabled = true;
+    previewNextBtn.disabled = true;
+    return;
+  }
+  const colorInfo = currentColorInfo();
+  const pages = paginateLabelSeqAdvanced(labelSeq, usedSlotsByPage, LABEL_PER_PAGE);
+  if(currentPreviewPage >= pages.length) currentPreviewPage = pages.length - 1;
+  if(currentPreviewPage < 0) currentPreviewPage = 0;
+
+  previewPageLabel.textContent = `페이지 ${currentPreviewPage + 1} / ${pages.length}`;
+  previewPrevBtn.disabled = currentPreviewPage <= 0;
+  previewNextBtn.disabled = currentPreviewPage >= pages.length - 1;
+
+  const pageItems = pages[currentPreviewPage];
+  const usedSet = usedSlotsByPage[currentPreviewPage] || new Set();
+
+  previewPage.innerHTML = '';
   for(let col=0; col<5; col++){
     const group = document.createElement('div');
-    group.className = 'sheet-grid-group';
+    group.className = 'preview-group';
 
     const numbers = document.createElement('div');
-    numbers.className = 'sheet-grid-numbers';
+    numbers.className = 'preview-numbers';
     for(let row=0; row<29; row++){
       const span = document.createElement('span');
       span.textContent = row+1;
@@ -1142,62 +1208,124 @@ function buildSheetGrid(){
     group.appendChild(numbers);
 
     const colDiv = document.createElement('div');
-    colDiv.className = 'sheet-grid-col';
+    colDiv.className = 'preview-col';
     for(let row=0; row<29; row++){
       const slot = col*29 + row + 1;
+      const item = pageItems[slot-1];
       const cell = document.createElement('div');
-      cell.className = 'sheet-cell';
+      cell.className = 'preview-slot';
       cell.dataset.slot = slot;
-      cell.title = `${slot}번`;
-      cell.addEventListener('click', ()=> setLabelStartSlot(slot));
+
+      if(usedSet.has(slot)){
+        cell.classList.add('used');
+      } else if(item){
+        cell.classList.add('filled');
+        if(item.type === 'NAME'){
+          const argb = nameSlotColor(item, colorInfo);
+          cell.style.background = '#' + argb.slice(2);
+          cell.innerHTML = `<b>${escapeHtmlPrint(item.text)}</b>`;
+        } else if(!item.line2){
+          cell.style.background = '#fff';
+          cell.textContent = item.line1;
+        } else {
+          cell.style.background = '#fff';
+          cell.innerHTML = `<span>${escapeHtmlPrint(item.line1)}</span><span class="psub">${escapeHtmlPrint(item.line2)}</span>`;
+        }
+      }
       colDiv.appendChild(cell);
     }
     group.appendChild(colDiv);
-    sheetGrid.appendChild(group);
+    previewPage.appendChild(group);
   }
-  renderSheetGrid();
+
+  const usedCount = usedSet.size;
+  previewPageInfo.innerHTML = usedCount > 0 ? `이 페이지에서 <b>${usedCount}칸</b> 사용됨으로 표시됨` : '이 페이지는 전체 칸 사용 가능';
+
+  attachDragHandlers();
 }
 
-function renderSheetGrid(){
-  sheetGrid.querySelectorAll('.sheet-cell').forEach(cell=>{
-    const slot = Number(cell.dataset.slot);
-    cell.classList.toggle('used', slot < labelStartSlot);
+function toggleSlotUsed(pageIdx, slot, forceState){
+  if(!usedSlotsByPage[pageIdx]) usedSlotsByPage[pageIdx] = new Set();
+  const set = usedSlotsByPage[pageIdx];
+  const shouldUse = forceState !== undefined ? forceState : !set.has(slot);
+  if(shouldUse) set.add(slot); else set.delete(slot);
+  return shouldUse;
+}
+
+let dragState = null; // { pageIdx, targetState }
+
+function updateSlotVisual(cell, isUsed){
+  cell.classList.toggle('used', isUsed);
+}
+
+let lastDragCell = null;
+
+function handleDragOverPoint(clientX, clientY){
+  if(!dragState) return;
+  const el = document.elementFromPoint(clientX, clientY);
+  const cell = el ? el.closest('.preview-slot') : null;
+  if(!cell || cell === lastDragCell) return;
+  lastDragCell = cell;
+  const slot = Number(cell.dataset.slot);
+  toggleSlotUsed(dragState.pageIdx, slot, dragState.targetState);
+  updateSlotVisual(cell, dragState.targetState);
+}
+
+let lastClickedSlot = null; // Shift+클릭 범위 지정의 기준점(마지막 "일반 클릭"한 칸)
+let lastClickedPage = null;
+
+function attachDragHandlers(){
+  const cells = previewPage.querySelectorAll('.preview-slot');
+  cells.forEach(cell=>{
+    cell.addEventListener('mousedown', (e)=>{
+      e.preventDefault();
+      const slot = Number(cell.dataset.slot);
+
+      // Shift+클릭: 마지막 일반 클릭 지점부터 여기까지 범위 전체를 "사용됨"으로 지정
+      if(e.shiftKey && lastClickedSlot !== null && lastClickedPage === currentPreviewPage){
+        const lo = Math.min(lastClickedSlot, slot);
+        const hi = Math.max(lastClickedSlot, slot);
+        for(let s=lo; s<=hi; s++){
+          toggleSlotUsed(currentPreviewPage, s, true);
+        }
+        renderPreview();
+        return;
+      }
+
+      // 일반 클릭: 기준점으로 저장 + 드래그 시작
+      lastClickedSlot = slot;
+      lastClickedPage = currentPreviewPage;
+      const newState = toggleSlotUsed(currentPreviewPage, slot);
+      dragState = { pageIdx: currentPreviewPage, targetState: newState };
+      lastDragCell = cell;
+      updateSlotVisual(cell, newState); // 가벼운 갱신 (전체 다시 그리지 않음)
+    });
   });
-  if(labelStartSlot <= 1){
-    sheetPickerInfo.innerHTML = '1번부터 시작 (전체 사용)';
-  } else {
-    sheetPickerInfo.innerHTML = `<b>${labelStartSlot}번</b>부터 시작 (${146-labelStartSlot}칸 사용 가능)`;
+  // 개별 칸의 mouseenter 대신, 컨테이너 전체의 mousemove로 좌표를 직접 추적해서
+  // 마우스를 아주 빠르게 움직여도 지나간 칸을 놓치지 않게 함
+  previewPage.addEventListener('mousemove', (e)=>{
+    if(!dragState) return;
+    handleDragOverPoint(e.clientX, e.clientY);
+  });
+}
+document.addEventListener('mouseup', ()=>{
+  if(dragState){
+    dragState = null;
+    lastDragCell = null;
+    renderPreview(); // 드래그가 끝난 시점에만 전체를 한 번 정리(칸 수 표시 등 갱신)
   }
-  sheetSlotInput.value = labelStartSlot > 1 ? labelStartSlot : '';
-}
-
-function setLabelStartSlot(slot){
-  slot = Math.min(145, Math.max(1, Math.round(slot) || 1));
-  labelStartSlot = slot;
-  renderSheetGrid();
-}
-
-sheetPickerReset.addEventListener('click', ()=> setLabelStartSlot(1));
-sheetSlotApply.addEventListener('click', ()=> setLabelStartSlot(Number(sheetSlotInput.value) || 1));
-sheetSlotInput.addEventListener('keydown', (e)=>{
-  if(e.key === 'Enter') setLabelStartSlot(Number(sheetSlotInput.value) || 1);
 });
 
-buildSheetGrid();
-
-// 시작 위치를 반영해서 페이지 배열 생성: 첫 페이지는 (시작번호-1)칸을 건너뛰고 채움, 이후 페이지는 새 라벨지로 간주해 1번부터
-function paginateLabelSeq(seq, startSlot, perPage){
-  const pages = [];
-  const firstCapacity = Math.max(0, perPage - (startSlot - 1));
-  const firstPage = new Array(startSlot - 1).fill(null).concat(seq.slice(0, firstCapacity));
-  pages.push(firstPage);
-  let idx = firstCapacity;
-  while(idx < seq.length){
-    pages.push(seq.slice(idx, idx + perPage));
-    idx += perPage;
-  }
-  return pages;
-}
+previewPrevBtn.addEventListener('click', ()=>{
+  if(currentPreviewPage > 0){ currentPreviewPage--; renderPreview(); }
+});
+previewNextBtn.addEventListener('click', ()=>{
+  currentPreviewPage++; renderPreview();
+});
+previewPageReset.addEventListener('click', ()=>{
+  delete usedSlotsByPage[currentPreviewPage];
+  renderPreview();
+});
 
 btnLabel.addEventListener('click', async ()=>{
   if(!labelSeq || !parsedRows) return;
@@ -1206,7 +1334,7 @@ btnLabel.addEventListener('click', async ()=>{
   try{
     const colorInfo = computeNameColors(parsedRows);
     const wb = new ExcelJS.Workbook();
-    const pages = paginateLabelSeq(labelSeq, labelStartSlot, LABEL_PER_PAGE);
+    const pages = paginateLabelSeqAdvanced(labelSeq, usedSlotsByPage, LABEL_PER_PAGE);
     pages.forEach((pageItems, p)=>{
       const ws = wb.addWorksheet(`--${p+1}--`);
       buildLabelSheet(ws, pageItems, colorInfo);
@@ -1319,7 +1447,7 @@ btnLabelPrint.addEventListener('click', ()=>{
   if(!labelSeq || !parsedRows) return;
   try{
     const colorInfo = computeNameColors(parsedRows);
-    const pages = paginateLabelSeq(labelSeq, labelStartSlot, LABEL_PER_PAGE);
+    const pages = paginateLabelSeqAdvanced(labelSeq, usedSlotsByPage, LABEL_PER_PAGE);
     const html = buildPrintDocument(pages, colorInfo);
     const printWin = window.open('', '_blank');
     if(!printWin){
