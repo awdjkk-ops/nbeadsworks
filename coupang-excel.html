@@ -206,6 +206,10 @@ async function handleFile(file){
 
   try{
     const ext = file.name.split('.').pop().toLowerCase();
+    if(ext === 'xls'){
+      setStatus('이 파일은 예전 엑셀 형식(.xls)이라서 못 읽어요. 엑셀에서 "다른 이름으로 저장" → 파일 형식을 ".xlsx"로 바꿔서 다시 올려주세요.', 'err');
+      return;
+    }
     let rows = ext === 'csv' ? await parseCSV(file) : await parseXLSX(file);
 
     rows = rows.map(r=>{
