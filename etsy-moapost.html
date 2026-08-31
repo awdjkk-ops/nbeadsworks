@@ -721,7 +721,7 @@ const PRINT_LABEL_W_CM = 6.4;
 const PRINT_LABEL_H_CM = 3.4;
 const PRINT_MARGIN = { top:1.1007, right:0.762, bottom:0.9402, left:0.4833 }; // 원본 엑셀 여백(inch)을 cm로 환산
 const PRINT_GAP_W_CM = (21 - PRINT_MARGIN.left - PRINT_MARGIN.right - 3*PRINT_LABEL_W_CM) / 2;
-const PRINT_GAP_H_CM = (29.7 - PRINT_MARGIN.top - PRINT_MARGIN.bottom - 8*PRINT_LABEL_H_CM) / 7;
+const PRINT_GAP_H_CM = 0.00844; // 실측 보정값 (계산값 0.0656cm였으나 8번째 줄이 0.4cm 밀리는 것을 확인하여 보정)
 
 function buildPrintSlotHTML(item){
   if(!item) return `<div class="p-slot"></div>`;
