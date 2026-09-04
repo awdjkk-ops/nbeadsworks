@@ -290,6 +290,14 @@
       <textarea id="bundleTextMsg" readonly style="min-height:270px;"></textarea>
     </div>
 
+    <div class="bundle-box" id="bundleBoxExtra" style="display:none;">
+      <div class="bundle-box-head">
+        <span><span style="color:#1f4e9c;font-weight:900;">+</span> 추가배송 목록 확인 <span style="font-weight:400;font-size:11px;">(이름 / 주소 / 전화번호 / 메모)</span></span>
+        <span class="bundle-copy-btn" id="btnCopyExtra">복사</span>
+      </div>
+      <textarea id="bundleTextExtra" readonly></textarea>
+    </div>
+
     <div class="sheet-picker-toggle" id="sheetPickerToggle">
       🏷️ 라벨지 시작 위치 지정하기 (이미 일부 사용한 라벨지 재사용) <span id="sheetPickerToggleArrow">▾</span>
     </div>
@@ -381,6 +389,7 @@ function resetAll(){
   document.getElementById('bundleBoxJeju').style.display = 'none';
   document.getElementById('bundleBoxTilde').style.display = 'none';
   document.getElementById('bundleBoxMsg').style.display = 'none';
+  document.getElementById('bundleBoxExtra').style.display = 'none';
   usedSlotsByPage = {};
   currentPreviewPage = 0;
   if(typeof renderPreview === 'function') renderPreview();
@@ -962,15 +971,17 @@ setupCopyButton('btnCopyYellow', 'bundleTextYellow');
 setupCopyButton('btnCopyJeju', 'bundleTextJeju');
 setupCopyButton('btnCopyTilde', 'bundleTextTilde');
 setupCopyButton('btnCopyMsg', 'bundleTextMsg');
+setupCopyButton('btnCopyExtra', 'bundleTextExtra');
 
 // 묶음배송 가능/제주도 배송/주소 물결표시(~) 변경을 각각 별도 박스에 표시 + 팝업은 섹션별로 요약
 // jejuItems: [{orderNo, name, tel1, tel2}]
-function showBundleSummary(yellowSummary, jejuItems, tildeNames, importantMsgItems, showModal){
+function showBundleSummary(yellowSummary, jejuItems, tildeNames, importantMsgItems, showModal, extraItems){
   if(showModal === undefined) showModal = true;
   const yellowBox = document.getElementById('bundleBoxYellow');
   const jejuBox = document.getElementById('bundleBoxJeju');
   const tildeBox = document.getElementById('bundleBoxTilde');
   const msgBox = document.getElementById('bundleBoxMsg');
+  const extraBox = document.getElementById('bundleBoxExtra');
 
   if(yellowSummary && yellowSummary.length){
     yellowBox.style.display = 'block';
@@ -1004,7 +1015,16 @@ function showBundleSummary(yellowSummary, jejuItems, tildeNames, importantMsgIte
     msgBox.style.display = 'none';
   }
 
-  // 팝업에는 묶음배송/제주도/주소변경만 표시 (중요 배송메세지는 복사 상자에서만 확인)
+  if(extraItems && extraItems.length){
+    extraBox.style.display = 'block';
+    document.getElementById('bundleTextExtra').value = extraItems
+      .map(it => `${it.recipient} / ${it.address} / ${it.tel1 || it.tel2 || ''} / ${it.orderNo || ''}`)
+      .join('\n');
+  } else {
+    extraBox.style.display = 'none';
+  }
+
+  // 팝업에는 묶음배송/제주도/주소변경만 표시 (중요 배송메세지·추가배송은 복사 상자에서만 확인)
   const modalParts = [];
   if(yellowSummary && yellowSummary.length) modalParts.push('묶음배송: ' + yellowSummary.map(g => `${g.name} 묶음 ${g.count}건`).join(', '));
   if(jejuItems && jejuItems.length) modalParts.push('제주도: ' + jejuItems.map(it=>it.name).join(', '));
@@ -1113,7 +1133,7 @@ btnCourier.addEventListener('click', async ()=>{
     const extraNote = extraCourierRows.length > 0 ? `, 추가배송 ${extraCourierRows.length}건 포함` : '';
     setStatus((blCount > 0 ? `택배 발송용 파일 생성 완료 (블랙리스트/경계대상 ${blCount}건 발견${extraNote})` : `택배 발송용 파일 생성 완료${extraNote}`), 'ok');
 
-    showBundleSummary(yellowSummary, jejuItems, tildeNames, importantMsgItems, true);
+    showBundleSummary(yellowSummary, jejuItems, tildeNames, importantMsgItems, true, extraCourierRows);
     await downloadWorkbook(wb, `택배발송_${todayTag()}.xlsx`);
   }catch(err){
     console.error(err);
@@ -1127,8 +1147,8 @@ btnCourier.addEventListener('click', async ()=>{
 async function runCourierPreview(){
   if(!courierRows) return;
   try{
-    const { yellowSummary, jejuItems, tildeNames, importantMsgItems } = await gatherCourierAnalysis(false);
-    showBundleSummary(yellowSummary, jejuItems, tildeNames, importantMsgItems, false);
+    const { yellowSummary, jejuItems, tildeNames, importantMsgItems, extraCourierRows } = await gatherCourierAnalysis(false);
+    showBundleSummary(yellowSummary, jejuItems, tildeNames, importantMsgItems, false, extraCourierRows);
   }catch(err){
     console.warn('미리보기 분석 실패:', err);
   }
