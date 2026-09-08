@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>품절 상품 입고관리</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<style>
+  :root{
+    --ink:#22262b;
+    --muted:#6b7280;
+    --bg:#f4f2ee;
+    --card:#ffffff;
+    --accent:#a8425c;
+    --accent-dark:#7f2f45;
+    --teal:#3a5a63;
+    --line:#e4e0d8;
+    --good:#2f7d5a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    padding:32px 16px 64px;
+  }
+  .wrap{max-width:820px;margin:0 auto;}
+  a.back{
+    display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:var(--muted);
+    text-decoration:none;margin-bottom:16px;
+  }
+  header{margin-bottom:24px;}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:12px;letter-spacing:.06em;color:var(--accent-dark);
+    background:#f3e3e7;padding:4px 10px;border-radius:20px;
+    font-weight:600;
+  }
+  h1{font-size:23px;margin:14px 0 6px;letter-spacing:-.01em;}
+  .sub{color:var(--muted);font-size:14px;line-height:1.6;margin:0;}
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:22px;
+    margin-bottom:16px;
+  }
+
+  .btn{
+    border:none;border-radius:8px;padding:11px 18px;font-size:14px;font-weight:700;
+    cursor:pointer;transition:opacity .15s, transform .1s;
+  }
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn:not(:disabled):hover{transform:translateY(-1px);}
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-ghost{background:#eceae4;color:var(--ink);}
+  .btn-small{padding:6px 12px;font-size:12.5px;white-space:nowrap;}
+  .btn-block{width:100%;margin-top:4px;}
+
+  .status{font-size:13px;padding:9px 12px;border-radius:8px;margin-top:10px;display:none;}
+  .status.show{display:block;}
+  .status.ok{background:#eaf5ef;color:var(--good);}
+  .status.err{background:#fbeceb;color:#a4342a;}
+  .status.busy{background:#eef1f6;color:var(--teal);}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{color:var(--muted);font-weight:600;font-size:12px;}
+  .empty{color:var(--muted);font-size:13.5px;text-align:center;padding:24px 0;}
+  tr.dup-row{background:#fff8e6;}
+  tr.dup-row td:first-child{border-left:3px solid #b58900;}
+
+  .setup-box{
+    background:#fff8e6;border:1px solid #f0d98c;border-radius:12px;padding:16px 18px;margin-bottom:16px;
+  }
+  .setup-box .field input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;}
+  .setup-box p{font-size:12.5px;color:#8a6a10;margin:0 0 10px;line-height:1.6;}
+  .connected-pill{
+    display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--good);
+    background:#eaf5ef;padding:4px 10px;border-radius:20px;font-weight:600;
+  }
+  .note-box{
+    background:#eef1f6;border-radius:10px;padding:12px 14px;font-size:12.5px;color:var(--teal);
+    line-height:1.6;margin-bottom:16px;
+  }
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
+  .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
+  .stat{background:#f7f6f2;border-radius:10px;padding:12px 14px;}
+  .stat .num{font-size:20px;font-weight:800;color:var(--accent-dark);}
+  .stat .lbl{font-size:12px;color:var(--muted);margin-top:2px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="index.html">← 메인으로 돌아가기</a>
+  <header>
+    <span class="eyebrow">품절 상품 입고관리</span>
+    <h1>발주요청 목록 정리</h1>
+    <p class="sub">"품절 상품 입고" 시트(코드/이름/옵션/수량)를 읽어서, 같은 상품(코드+옵션)끼리 수량을 합산해요. 이미 색칠(처리 완료 표시)된 줄과 겹치는 상품은 노란색으로 강조돼요.</p>
+  </header>
+
+  <div class="setup-box" id="setupBox" style="display:none;">
+    <p><b>처음 한 번만 설정하면 돼요.</b> 블랙리스트/추가배송과 같은 Google Apps Script 배포 주소를 붙여넣어주세요.</p>
+    <div class="field" style="margin-bottom:10px;">
+      <input type="text" id="apiUrlInput" placeholder="https://script.google.com/macros/s/xxxxx/exec">
+    </div>
+    <button class="btn btn-primary btn-small" id="btnSaveUrl">연결하기</button>
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <span class="connected-pill">● 연결됨</span>
+      <span class="btn-ghost btn btn-small" id="btnChangeUrl">연결 주소 변경</span>
+    </div>
+
+    <div class="note-box">
+      ⓘ <b>노란색 줄</b> = 이 상품(코드+옵션)이 이미 색칠된(처리 완료 표시된) 줄에도 있어요. 다시 요청하는 게 맞는지 한 번 확인해주세요.
+    </div>
+
+    <div class="card">
+      <div class="toolbar">
+        <b style="font-size:14.5px;">발주요청 목록</b>
+        <div style="display:flex;gap:6px;">
+          <span class="btn-ghost btn btn-small" id="btnRefresh">새로고침</span>
+          <span class="btn-ghost btn btn-small" id="btnCopy">복사(탭 구분)</span>
+          <span class="btn-ghost btn btn-small" id="btnDownload">엑셀 다운로드</span>
+        </div>
+      </div>
+
+      <div class="summary" id="summary" style="display:none;">
+        <div class="stat"><div class="num" id="statTotal">0</div><div class="lbl">품목 수</div></div>
+        <div class="stat"><div class="num" id="statDup">0</div><div class="lbl">중복 의심(노란색)</div></div>
+        <div class="stat"><div class="num" id="statRaw">0</div><div class="lbl">원본 줄 수</div></div>
+      </div>
+
+      <div id="listWrap"><div class="empty">불러오는 중...</div></div>
+      <div class="status" id="status"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'blacklist_api_url'; // 블랙리스트/추가배송과 동일한 배포 주소 공유
+let apiUrl = localStorage.getItem(STORAGE_KEY) || '';
+let groupsGlobal = [];
+
+const setupBox = document.getElementById('setupBox');
+const mainArea = document.getElementById('mainArea');
+const apiUrlInput = document.getElementById('apiUrlInput');
+const statusEl = document.getElementById('status');
+const listWrap = document.getElementById('listWrap');
+const summaryEl = document.getElementById('summary');
+
+function setStatus(msg, kind){
+  if(!msg){ statusEl.className = 'status'; statusEl.textContent=''; return; }
+  statusEl.className = 'status show ' + kind;
+  statusEl.textContent = msg;
+}
+
+function render(){
+  if(apiUrl){
+    setupBox.style.display = 'none';
+    mainArea.style.display = 'block';
+    loadAndConsolidate();
+  } else {
+    setupBox.style.display = 'block';
+    mainArea.style.display = 'none';
+  }
+}
+
+document.getElementById('btnSaveUrl').addEventListener('click', ()=>{
+  const v = apiUrlInput.value.trim();
+  if(!v.startsWith('https://script.google.com/')){
+    alert('올바른 Google Apps Script 웹 앱 주소를 입력해주세요.');
+    return;
+  }
+  apiUrl = v;
+  localStorage.setItem(STORAGE_KEY, apiUrl);
+  render();
+});
+
+document.getElementById('btnChangeUrl').addEventListener('click', ()=>{
+  if(confirm('연결 주소를 변경하시겠어요?')){
+    apiUrl = '';
+    localStorage.removeItem(STORAGE_KEY);
+    apiUrlInput.value = '';
+    render();
+  }
+});
+
+document.getElementById('btnRefresh').addEventListener('click', loadAndConsolidate);
+
+function jsonp(url, params){
+  return new Promise((resolve, reject)=>{
+    const cbName = 'cb_' + Date.now() + '_' + Math.floor(Math.random()*100000);
+    const timer = setTimeout(()=>{ cleanup(); reject(new Error('응답 시간 초과')); }, 15000);
+    function cleanup(){
+      clearTimeout(timer);
+      delete window[cbName];
+      if(script.parentNode) script.parentNode.removeChild(script);
+    }
+    window[cbName] = (data)=>{ cleanup(); resolve(data); };
+    const qs = new URLSearchParams({ ...params, callback: cbName }).toString();
+    const script = document.createElement('script');
+    script.src = url + (url.includes('?') ? '&' : '?') + qs;
+    script.onerror = ()=>{ cleanup(); reject(new Error('네트워크 오류')); };
+    document.body.appendChild(script);
+  });
+}
+
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// 코드+옵션이 완전히 같은 줄끼리(색칠 여부 상관없이) 수량 합산.
+// 합쳐진 항목 중 하나라도 색칠된 줄이 있었으면 dup(중복의심)으로 표시
+function consolidate(items){
+  const map = new Map();
+  items.forEach(it=>{
+    const key = it.code + '||' + it.option;
+    if(!map.has(key)) map.set(key, { code: it.code, name: it.name, option: it.option, qty: 0, hasColored: false });
+    const g = map.get(key);
+    g.qty += it.qty;
+    if(it.colored) g.hasColored = true;
+    if(!g.name && it.name) g.name = it.name;
+  });
+  const groups = Array.from(map.values());
+  groups.sort((a,b)=> (a.code+a.option).localeCompare(b.code+b.option, 'ko'));
+  return groups;
+}
+
+async function loadAndConsolidate(){
+  listWrap.innerHTML = '<div class="empty">불러오는 중...</div>';
+  summaryEl.style.display = 'none';
+  try{
+    const data = await jsonp(apiUrl, { action:'listInventory' });
+    if(!data.ok) throw new Error(data.error || '불러오기 실패');
+    const items = data.items || [];
+    groupsGlobal = consolidate(items);
+    renderList(groupsGlobal, items.length);
+  }catch(err){
+    console.error(err);
+    listWrap.innerHTML = `<div class="empty">불러오지 못했어요: ${err.message}</div>`;
+  }
+}
+
+function renderList(groups, rawCount){
+  const dupCount = groups.filter(g=>g.hasColored).length;
+  document.getElementById('statTotal').textContent = groups.length;
+  document.getElementById('statDup').textContent = dupCount;
+  document.getElementById('statRaw').textContent = rawCount;
+  summaryEl.style.display = 'grid';
+
+  if(groups.length === 0){
+    listWrap.innerHTML = '<div class="empty">등록된 품절 항목이 없어요.</div>';
+    return;
+  }
+  const rows = groups.map(g => `
+    <tr class="${g.hasColored ? 'dup-row' : ''}">
+      <td>${escapeHtml(g.code)}</td>
+      <td>${escapeHtml(g.name)}</td>
+      <td>${escapeHtml(g.option)}</td>
+      <td>${g.qty}</td>
+    </tr>
+  `).join('');
+  listWrap.innerHTML = `
+    <table>
+      <thead><tr><th>코드</th><th>상품명</th><th>옵션</th><th>수량</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+document.getElementById('btnCopy').addEventListener('click', async ()=>{
+  if(!groupsGlobal.length){ alert('불러온 목록이 없어요.'); return; }
+  const tsv = groupsGlobal.map(g => `${g.code}\t${g.name}\t${g.option}\t${g.qty}`).join('\n');
+  try{
+    await navigator.clipboard.writeText(tsv);
+    setStatus('복사했어요! 사입자분 시트에 붙여넣으세요.', 'ok');
+  }catch(err){
+    setStatus('복사에 실패했어요: ' + err.message, 'err');
+  }
+});
+
+document.getElementById('btnDownload').addEventListener('click', async ()=>{
+  if(!groupsGlobal.length){ alert('불러온 목록이 없어요.'); return; }
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('발주요청');
+  ws.addRow(['코드','상품명','옵션','수량']);
+  ws.getRow(1).font = {bold:true};
+  const yellow = {type:'pattern', pattern:'solid', fgColor:{argb:'FFFFFF00'}};
+
+  groupsGlobal.forEach(g=>{
+    const row = ws.addRow([g.code, g.name, g.option, g.qty]);
+    if(g.hasColored){
+      row.eachCell(cell => { cell.fill = yellow; });
+    }
+  });
+  ws.getColumn(1).width = 14;
+  ws.getColumn(2).width = 46;
+  ws.getColumn(3).width = 24;
+  ws.getColumn(4).width = 10;
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const d = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  a.href = url;
+  a.download = `발주요청_${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.xlsx`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+});
+
+render();
+</script>
+</body>
+</html>
