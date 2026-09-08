@@ -220,20 +220,17 @@ function consolidate(items){
   const map = new Map();
   items.forEach(it=>{
     const key = it.code + '||' + it.option;
-    if(!map.has(key)) map.set(key, { code: it.code, name: it.name, option: it.option, qtyNum: 0, qtyUnit: it.qtyUnit || '', hasColored: false });
+    if(!map.has(key)) map.set(key, { code: it.code, name: it.name, option: it.option, qtyNum: 0, qtyUnit: it.qtyUnit || '', hasColoredRow: false, hasUncoloredRow: false });
     const g = map.get(key);
     g.qtyNum += it.qtyNum;
-    if(it.colored) g.hasColored = true;
+    if(it.colored) g.hasColoredRow = true; else g.hasUncoloredRow = true;
     if(!g.name && it.name) g.name = it.name;
   });
-  const groups = Array.from(map.values());
-  groups.forEach(g=>{ g.qtyText = `${g.qtyNum}${g.qtyUnit}`; });
-  groups.sort((a,b)=>{
-    const byCode = a.code.localeCompare(b.code, 'ko', { numeric: true });
-    if(byCode !== 0) return byCode;
-    const byName = a.name.localeCompare(b.name, 'ko', { numeric: true });
-    if(byName !== 0) return byName;
-    return a.option.localeCompare(b.option, 'ko', { numeric: true });
+  const groups = Array.from(map.values()); // 시트에 입력된(처음 나온) 순서 그대로 유지
+  groups.forEach(g=>{
+    g.qtyText = `${g.qtyNum}${g.qtyUnit}`;
+    // 색칠된 줄과 색칠 안된 줄이 같은 상품(코드+옵션)에 둘 다 있을 때만 "중복의심"으로 표시
+    g.hasColored = g.hasColoredRow && g.hasUncoloredRow;
   });
   return groups;
 }
@@ -287,11 +284,31 @@ function formatOrderLine(g){
 document.getElementById('btnCopy').addEventListener('click', async ()=>{
   if(!groupsGlobal.length){ alert('불러온 목록이 없어요.'); return; }
   const text = groupsGlobal.map(formatOrderLine).join('\n');
+  const htmlRows = groupsGlobal.map(g => {
+    const bg = g.hasColored ? ' style="background-color:#FFFF00;"' : '';
+    return `<tr><td${bg}>${escapeHtml(formatOrderLine(g))}</td></tr>`;
+  }).join('');
+  const html = `<table>${htmlRows}</table>`;
+
   try{
-    await navigator.clipboard.writeText(text);
-    setStatus('복사했어요! 사입자분 시트에 붙여넣으세요.', 'ok');
+    if(window.ClipboardItem){
+      const item = new ClipboardItem({
+        'text/plain': new Blob([text], {type:'text/plain'}),
+        'text/html': new Blob([html], {type:'text/html'})
+      });
+      await navigator.clipboard.write([item]);
+    } else {
+      await navigator.clipboard.writeText(text); // HTML 복사를 지원 안 하는 브라우저용 대체
+    }
+    setStatus('복사했어요! (노란색 표시 포함) 사입자분 시트에 붙여넣으세요.', 'ok');
   }catch(err){
-    setStatus('복사에 실패했어요: ' + err.message, 'err');
+    // 일부 브라우저는 write()에서 막힐 수 있어 텍스트로 한번 더 시도
+    try{
+      await navigator.clipboard.writeText(text);
+      setStatus('복사했어요! (색상 없이 텍스트만) 사입자분 시트에 붙여넣으세요.', 'ok');
+    }catch(err2){
+      setStatus('복사에 실패했어요: ' + err2.message, 'err');
+    }
   }
 });
 
