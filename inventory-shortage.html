@@ -273,11 +273,15 @@ function renderList(groups, rawCount){
   `;
 }
 
+function formatOrderLine(g){
+  return `${g.name} - ${g.option} * ${g.qty}`;
+}
+
 document.getElementById('btnCopy').addEventListener('click', async ()=>{
   if(!groupsGlobal.length){ alert('불러온 목록이 없어요.'); return; }
-  const tsv = groupsGlobal.map(g => `${g.code}\t${g.name}\t${g.option}\t${g.qty}`).join('\n');
+  const text = groupsGlobal.map(formatOrderLine).join('\n');
   try{
-    await navigator.clipboard.writeText(tsv);
+    await navigator.clipboard.writeText(text);
     setStatus('복사했어요! 사입자분 시트에 붙여넣으세요.', 'ok');
   }catch(err){
     setStatus('복사에 실패했어요: ' + err.message, 'err');
@@ -288,20 +292,17 @@ document.getElementById('btnDownload').addEventListener('click', async ()=>{
   if(!groupsGlobal.length){ alert('불러온 목록이 없어요.'); return; }
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('발주요청');
-  ws.addRow(['코드','상품명','옵션','수량']);
+  ws.addRow(['발주요청 내용']);
   ws.getRow(1).font = {bold:true};
   const yellow = {type:'pattern', pattern:'solid', fgColor:{argb:'FFFFFF00'}};
 
   groupsGlobal.forEach(g=>{
-    const row = ws.addRow([g.code, g.name, g.option, g.qty]);
+    const row = ws.addRow([formatOrderLine(g)]);
     if(g.hasColored){
       row.eachCell(cell => { cell.fill = yellow; });
     }
   });
-  ws.getColumn(1).width = 14;
-  ws.getColumn(2).width = 46;
-  ws.getColumn(3).width = 24;
-  ws.getColumn(4).width = 10;
+  ws.getColumn(1).width = 70;
 
   const buf = await wb.xlsx.writeBuffer();
   const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
