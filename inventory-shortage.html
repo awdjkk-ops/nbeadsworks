@@ -232,7 +232,10 @@ function consolidate(items){
     // 색칠된 줄과 색칠 안된 줄이 같은 상품(코드+옵션)에 둘 다 있을 때만 "중복의심"으로 표시
     g.hasColored = g.hasColoredRow && g.hasUncoloredRow;
   });
-  return groups;
+  // 중복의심(노란색) 항목만 맨 아래로 보냄 (그 안에서는 원래 순서 그대로 유지)
+  const normal = groups.filter(g => !g.hasColored);
+  const dup = groups.filter(g => g.hasColored);
+  return normal.concat(dup);
 }
 
 async function loadAndConsolidate(){
