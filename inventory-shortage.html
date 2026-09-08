@@ -278,6 +278,9 @@ function renderList(groups, rawCount){
 }
 
 function formatOrderLine(g){
+  if(!g.option || String(g.option).trim() === ''){
+    return `${g.name} * ${g.qtyText}`;
+  }
   return `${g.name} - ${g.option} * ${g.qtyText}`;
 }
 
