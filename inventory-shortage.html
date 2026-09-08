@@ -228,7 +228,13 @@ function consolidate(items){
   });
   const groups = Array.from(map.values());
   groups.forEach(g=>{ g.qtyText = `${g.qtyNum}${g.qtyUnit}`; });
-  groups.sort((a,b)=> (a.code+a.option).localeCompare(b.code+b.option, 'ko'));
+  groups.sort((a,b)=>{
+    const byCode = a.code.localeCompare(b.code, 'ko');
+    if(byCode !== 0) return byCode;
+    const byName = a.name.localeCompare(b.name, 'ko');
+    if(byName !== 0) return byName;
+    return a.option.localeCompare(b.option, 'ko');
+  });
   return groups;
 }
 
