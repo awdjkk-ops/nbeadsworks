@@ -220,13 +220,14 @@ function consolidate(items){
   const map = new Map();
   items.forEach(it=>{
     const key = it.code + '||' + it.option;
-    if(!map.has(key)) map.set(key, { code: it.code, name: it.name, option: it.option, qty: 0, hasColored: false });
+    if(!map.has(key)) map.set(key, { code: it.code, name: it.name, option: it.option, qtyNum: 0, qtyUnit: it.qtyUnit || '', hasColored: false });
     const g = map.get(key);
-    g.qty += it.qty;
+    g.qtyNum += it.qtyNum;
     if(it.colored) g.hasColored = true;
     if(!g.name && it.name) g.name = it.name;
   });
   const groups = Array.from(map.values());
+  groups.forEach(g=>{ g.qtyText = `${g.qtyNum}${g.qtyUnit}`; });
   groups.sort((a,b)=> (a.code+a.option).localeCompare(b.code+b.option, 'ko'));
   return groups;
 }
@@ -262,7 +263,7 @@ function renderList(groups, rawCount){
       <td>${escapeHtml(g.code)}</td>
       <td>${escapeHtml(g.name)}</td>
       <td>${escapeHtml(g.option)}</td>
-      <td>${g.qty}</td>
+      <td>${g.qtyText}</td>
     </tr>
   `).join('');
   listWrap.innerHTML = `
@@ -274,7 +275,7 @@ function renderList(groups, rawCount){
 }
 
 function formatOrderLine(g){
-  return `${g.name} - ${g.option} * ${g.qty}`;
+  return `${g.name} - ${g.option} * ${g.qtyText}`;
 }
 
 document.getElementById('btnCopy').addEventListener('click', async ()=>{
