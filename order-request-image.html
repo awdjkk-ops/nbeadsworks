@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>사입요청 이미지 생성</title>
+<style>
+  :root{
+    --ink:#22262b;
+    --muted:#6b7280;
+    --bg:#f4f2ee;
+    --card:#ffffff;
+    --accent:#a8425c;
+    --accent-dark:#7f2f45;
+    --teal:#3a5a63;
+    --line:#e4e0d8;
+    --good:#2f7d5a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    padding:32px 16px 64px;
+  }
+  .wrap{max-width:720px;margin:0 auto;}
+  a.back{
+    display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:var(--muted);
+    text-decoration:none;margin-bottom:16px;
+  }
+  header{margin-bottom:24px;}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:12px;letter-spacing:.06em;color:var(--accent-dark);
+    background:#f3e3e7;padding:4px 10px;border-radius:20px;
+    font-weight:600;
+  }
+  h1{font-size:23px;margin:14px 0 6px;letter-spacing:-.01em;}
+  .sub{color:var(--muted);font-size:14px;line-height:1.6;margin:0;}
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:22px;
+    margin-bottom:16px;
+  }
+
+  .btn{
+    border:none;border-radius:8px;padding:11px 18px;font-size:14px;font-weight:700;
+    cursor:pointer;transition:opacity .15s, transform .1s;
+  }
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn:not(:disabled):hover{transform:translateY(-1px);}
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-ghost{background:#eceae4;color:var(--ink);}
+  .btn-small{padding:6px 12px;font-size:12.5px;white-space:nowrap;}
+  .btn-block{width:100%;margin-top:4px;}
+
+  .status{font-size:13px;padding:9px 12px;border-radius:8px;margin-top:10px;display:none;}
+  .status.show{display:block;}
+  .status.ok{background:#eaf5ef;color:var(--good);}
+  .status.err{background:#fbeceb;color:#a4342a;}
+  .status.busy{background:#eef1f6;color:var(--teal);}
+
+  .row-table{width:100%;border-collapse:collapse;margin-bottom:10px;}
+  .row-table th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:0 6px 6px;}
+  .row-table td{padding:4px 6px;}
+  .row-table input{
+    width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;
+    font-size:13.5px;font-family:inherit;
+  }
+  .row-table input:focus{outline:none;border-color:var(--accent);}
+  .row-del{
+    background:none;border:none;color:#c0392b;cursor:pointer;font-size:16px;padding:4px 8px;
+  }
+
+  .setup-box{
+    background:#fff8e6;border:1px solid #f0d98c;border-radius:12px;padding:16px 18px;margin-bottom:16px;
+  }
+  .setup-box .field input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;}
+  .setup-box p{font-size:12.5px;color:#8a6a10;margin:0 0 10px;line-height:1.6;}
+  .connected-pill{
+    display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--good);
+    background:#eaf5ef;padding:4px 10px;border-radius:20px;font-weight:600;
+  }
+
+  #previewWrap{
+    background:#f7f6f2;border-radius:10px;padding:14px;text-align:center;margin-top:14px;
+  }
+  #previewWrap canvas{max-width:100%;border:1px solid var(--line);border-radius:6px;}
+  #previewWrap .empty{color:var(--muted);font-size:13px;padding:30px 0;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="index.html">← 메인으로 돌아가기</a>
+  <header>
+    <span class="eyebrow">사입요청 이미지 생성</span>
+    <h1>사진+수량 요청 이미지 만들기</h1>
+    <p class="sub">코드/옵션(번호)/수량을 입력하면, 상품 사진 아래에 필요한 옵션과 수량이 적힌 이미지를 자동으로 만들어줘요. 여러 상품이어도 사진 한 장으로 길게 이어붙여요.</p>
+  </header>
+
+  <div class="setup-box" id="setupBox" style="display:none;">
+    <p><b>처음 한 번만 설정하면 돼요.</b> 블랙리스트/추가배송/재고관리와 같은 Google Apps Script 배포 주소를 붙여넣어주세요.</p>
+    <div class="field" style="margin-bottom:10px;">
+      <input type="text" id="apiUrlInput" placeholder="https://script.google.com/macros/s/xxxxx/exec">
+    </div>
+    <button class="btn btn-primary btn-small" id="btnSaveUrl">연결하기</button>
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <span class="connected-pill">● 연결됨</span>
+      <span class="btn-ghost btn btn-small" id="btnChangeUrl">연결 주소 변경</span>
+    </div>
+
+    <div class="card">
+      <b style="font-size:14.5px;">요청 목록 입력</b>
+      <table class="row-table" style="margin-top:12px;">
+        <thead>
+          <tr><th style="width:28%;">코드</th><th style="width:38%;">옵션(번호 등)</th><th style="width:22%;">수량</th><th></th></tr>
+        </thead>
+        <tbody id="rowsBody"></tbody>
+      </table>
+      <span class="btn-ghost btn btn-small" id="btnAddRow">+ 항목 추가</span>
+
+      <button class="btn btn-primary btn-block" id="btnGenerate">이미지 생성</button>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="card" id="resultCard" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <b style="font-size:14.5px;">생성된 이미지</b>
+        <span class="btn-ghost btn btn-small" id="btnDownloadImg">다운로드</span>
+      </div>
+      <div id="previewWrap"><div class="empty">아직 생성된 이미지가 없어요.</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'blacklist_api_url'; // 블랙리스트/추가배송/재고관리와 동일한 배포 주소 공유
+let apiUrl = localStorage.getItem(STORAGE_KEY) || '';
+
+const setupBox = document.getElementById('setupBox');
+const mainArea = document.getElementById('mainArea');
+const apiUrlInput = document.getElementById('apiUrlInput');
+const statusEl = document.getElementById('status');
+const rowsBody = document.getElementById('rowsBody');
+const resultCard = document.getElementById('resultCard');
+const previewWrap = document.getElementById('previewWrap');
+
+function setStatus(msg, kind){
+  if(!msg){ statusEl.className = 'status'; statusEl.textContent=''; return; }
+  statusEl.className = 'status show ' + kind;
+  statusEl.textContent = msg;
+}
+
+function render(){
+  if(apiUrl){
+    setupBox.style.display = 'none';
+    mainArea.style.display = 'block';
+  } else {
+    setupBox.style.display = 'block';
+    mainArea.style.display = 'none';
+  }
+}
+
+document.getElementById('btnSaveUrl').addEventListener('click', ()=>{
+  const v = apiUrlInput.value.trim();
+  if(!v.startsWith('https://script.google.com/')){
+    alert('올바른 Google Apps Script 웹 앱 주소를 입력해주세요.');
+    return;
+  }
+  apiUrl = v;
+  localStorage.setItem(STORAGE_KEY, apiUrl);
+  render();
+});
+
+document.getElementById('btnChangeUrl').addEventListener('click', ()=>{
+  if(confirm('연결 주소를 변경하시겠어요?')){
+    apiUrl = '';
+    localStorage.removeItem(STORAGE_KEY);
+    apiUrlInput.value = '';
+    render();
+  }
+});
+
+function jsonp(url, params){
+  return new Promise((resolve, reject)=>{
+    const cbName = 'cb_' + Date.now() + '_' + Math.floor(Math.random()*100000);
+    const timer = setTimeout(()=>{ cleanup(); reject(new Error('응답 시간 초과')); }, 20000);
+    function cleanup(){
+      clearTimeout(timer);
+      delete window[cbName];
+      if(script.parentNode) script.parentNode.removeChild(script);
+    }
+    window[cbName] = (data)=>{ cleanup(); resolve(data); };
+    const qs = new URLSearchParams({ ...params, callback: cbName }).toString();
+    const script = document.createElement('script');
+    script.src = url + (url.includes('?') ? '&' : '?') + qs;
+    script.onerror = ()=>{ cleanup(); reject(new Error('네트워크 오류')); };
+    document.body.appendChild(script);
+  });
+}
+
+// ---- 입력 행 관리 ----
+function addRow(code, option, qty){
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="text" class="in-code" value="${code||''}" placeholder="예: CRT223"></td>
+    <td><input type="text" class="in-option" value="${option||''}" placeholder="예: 5번"></td>
+    <td><input type="text" class="in-qty" value="${qty||''}" placeholder="예: 10줄"></td>
+    <td><button class="row-del" title="삭제">✕</button></td>
+  `;
+  tr.querySelector('.row-del').addEventListener('click', ()=>{
+    tr.remove();
+    if(rowsBody.children.length === 0) addRow();
+  });
+  rowsBody.appendChild(tr);
+}
+document.getElementById('btnAddRow').addEventListener('click', ()=> addRow());
+addRow(); // 시작 시 빈 줄 1개
+
+function getRows(){
+  return Array.from(rowsBody.querySelectorAll('tr')).map(tr => ({
+    code: tr.querySelector('.in-code').value.trim(),
+    option: tr.querySelector('.in-option').value.trim(),
+    qty: tr.querySelector('.in-qty').value.trim()
+  })).filter(r => r.code);
+}
+
+// ---- 이미지 생성 ----
+let finalCanvas = null;
+
+document.getElementById('btnGenerate').addEventListener('click', async ()=>{
+  const rows = getRows();
+  if(rows.length === 0){ alert('코드를 하나 이상 입력해주세요.'); return; }
+
+  // 코드별로 옵션/수량 묶기 (같은 코드=같은 사진)
+  const byCode = new Map();
+  rows.forEach(r=>{
+    if(!byCode.has(r.code)) byCode.set(r.code, []);
+    byCode.get(r.code).push(r);
+  });
+
+  setStatus('사진을 불러오는 중...', 'busy');
+  document.getElementById('btnGenerate').disabled = true;
+
+  try{
+    const groups = [];
+    for(const [code, items] of byCode){
+      const data = await jsonp(apiUrl, { action:'getImageForCode', code });
+      if(!data.ok){
+        throw new Error(`"${code}" 사진을 못 가져왔어요: ${data.error}`);
+      }
+      groups.push({ code, items, dataUrl: data.dataUrl });
+    }
+
+    setStatus('이미지 합성 중...', 'busy');
+    const canvas = await buildCompositeImage(groups);
+    finalCanvas = canvas;
+
+    previewWrap.innerHTML = '';
+    previewWrap.appendChild(canvas);
+    resultCard.style.display = 'block';
+    setStatus(`완료! ${groups.length}개 사진을 합쳤어요.`, 'ok');
+  }catch(err){
+    console.error(err);
+    setStatus('오류: ' + err.message, 'err');
+  }finally{
+    document.getElementById('btnGenerate').disabled = false;
+  }
+});
+
+function loadImage(src){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.onload = ()=> resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+const CANVAS_WIDTH = 700;
+const CAPTION_LINE_HEIGHT = 34;
+const CAPTION_PADDING = 16;
+const GAP_BETWEEN_GROUPS = 20;
+
+async function buildCompositeImage(groups){
+  const imgs = await Promise.all(groups.map(g => loadImage(g.dataUrl)));
+
+  // 각 그룹의 캡션 줄 수 계산 (옵션당 한 줄)
+  const captionLines = groups.map(g => g.items.map(it => {
+    const parts = [];
+    if(it.option) parts.push(it.option);
+    if(it.qty) parts.push(it.qty);
+    return parts.join(' - ') || '수량 미정';
+  }));
+
+  let totalHeight = 0;
+  const scaledHeights = imgs.map(img => {
+    const h = Math.round(img.naturalHeight * (CANVAS_WIDTH / img.naturalWidth));
+    return h;
+  });
+  groups.forEach((g, i)=>{
+    totalHeight += scaledHeights[i];
+    totalHeight += CAPTION_PADDING*2 + captionLines[i].length * CAPTION_LINE_HEIGHT;
+    totalHeight += GAP_BETWEEN_GROUPS;
+  });
+
+  const canvas = document.createElement('canvas');
+  canvas.width = CANVAS_WIDTH;
+  canvas.height = totalHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  let y = 0;
+  groups.forEach((g, i)=>{
+    const img = imgs[i];
+    const h = scaledHeights[i];
+    ctx.drawImage(img, 0, y, CANVAS_WIDTH, h);
+    y += h;
+
+    // 캡션 배경
+    const capHeight = CAPTION_PADDING*2 + captionLines[i].length * CAPTION_LINE_HEIGHT;
+    ctx.fillStyle = '#22262b';
+    ctx.fillRect(0, y, CANVAS_WIDTH, capHeight);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    let ty = y + CAPTION_PADDING + CAPTION_LINE_HEIGHT/2;
+    captionLines[i].forEach(line=>{
+      ctx.fillText(`[${g.code}] ${line}`, CANVAS_WIDTH/2, ty);
+      ty += CAPTION_LINE_HEIGHT;
+    });
+    y += capHeight;
+    y += GAP_BETWEEN_GROUPS;
+  });
+
+  return canvas;
+}
+
+document.getElementById('btnDownloadImg').addEventListener('click', ()=>{
+  if(!finalCanvas){ alert('먼저 이미지를 생성해주세요.'); return; }
+  const a = document.createElement('a');
+  const d = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  a.download = `사입요청_${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.png`;
+  a.href = finalCanvas.toDataURL('image/png');
+  a.click();
+});
+
+render();
+</script>
+</body>
+</html>
