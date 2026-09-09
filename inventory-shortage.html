@@ -219,7 +219,7 @@ function escapeHtml(s){
 function consolidate(items){
   const map = new Map();
   items.forEach(it=>{
-    const key = it.code + '||' + it.option;
+    const key = (it.code + '||' + it.option).toLowerCase(); // 대소문자 구분 없이 같은 상품으로 인식
     if(!map.has(key)) map.set(key, { code: it.code, name: it.name, option: it.option, qtyNum: 0, qtyUnit: it.qtyUnit || '', hasColoredRow: false, hasUncoloredRow: false });
     const g = map.get(key);
     g.qtyNum += it.qtyNum;
