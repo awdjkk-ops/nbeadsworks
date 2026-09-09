@@ -226,10 +226,12 @@ function consolidate(items){
     if(it.colored) g.hasColoredRow = true; else g.hasUncoloredRow = true;
     if(!g.name && it.name) g.name = it.name;
   });
-  const groups = Array.from(map.values()); // 시트에 입력된(처음 나온) 순서 그대로 유지
+  let groups = Array.from(map.values()); // 시트에 입력된(처음 나온) 순서 그대로 유지
+  // 색칠 안 된 줄이 하나도 없는 상품(=이미 전부 보낸 상품)은 목록에서 완전히 제외
+  groups = groups.filter(g => g.hasUncoloredRow);
   groups.forEach(g=>{
     g.qtyText = `${g.qtyNum}${g.qtyUnit}`;
-    // 색칠된 줄과 색칠 안된 줄이 같은 상품(코드+옵션)에 둘 다 있을 때만 "중복의심"으로 표시
+    // 색칠된 줄과 색칠 안된 줄이 같은 상품(코드+옵션)에 둘 다 있으면 "중복의심"으로 표시 (수량은 둘 다 합산됨)
     g.hasColored = g.hasColoredRow && g.hasUncoloredRow;
   });
   // 중복의심(노란색) 항목만 맨 아래로 보냄 (그 안에서는 원래 순서 그대로 유지)
