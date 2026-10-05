@@ -404,13 +404,17 @@ async function parseXLSX(file){
 function buildLabelSequence(rows){
   const seq = [];
   let prevKey = null;
+  let prevOrderNo = null;
   rows.forEach(r=>{
     const name = trimVal(r,'Ship Name');
     const addr = trimVal(r,'Ship Address1') + ' ' + trimVal(r,'Ship Address2');
+    const orderNo = trimVal(r,'Order ID');
     const key = name + '||' + addr;
-    if(key !== prevKey){
+    // 고객(이름+주소)이 바뀌거나, 같은 고객이라도 Order ID가 바뀌면 이름 칸을 새로 넣음 (주문 구분이 쉽도록)
+    if(key !== prevKey || orderNo !== prevOrderNo){
       seq.push({ type:'NAME', text:name, groupKey:key });
       prevKey = key;
+      prevOrderNo = orderNo;
     }
     seq.push({ type:'PROD', line1: trimVal(r,'Item Name'), line2: trimVal(r,'Variations') });
   });

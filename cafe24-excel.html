@@ -822,13 +822,17 @@ const LABEL_DEFAULT_FONT_XML = '<font><sz val="11"/><name val="돋움"/><family 
 function buildLabelSequence(rows){
   const seq = [];
   let prevKey = null;
+  let prevOrderNo = null;
   rows.forEach(r=>{
     const name = trimVal(r,'수령인');
     const addr = trimVal(r,'주소');
+    const orderNo = trimVal(r,'주문번호');
     const key = name + '||' + addr;
-    if(key !== prevKey){
+    // 고객(이름+주소)이 바뀌거나, 같은 고객이라도 주문번호가 바뀌면 이름 칸을 새로 넣음 (주문 구분이 쉽도록)
+    if(key !== prevKey || orderNo !== prevOrderNo){
       seq.push({ type:'NAME', text:name, groupKey:key });
       prevKey = key;
+      prevOrderNo = orderNo;
     }
     seq.push({ type:'PROD', line1: trimVal(r,'주문상품명'), line2: trimVal(r,'옵션') });
   });
