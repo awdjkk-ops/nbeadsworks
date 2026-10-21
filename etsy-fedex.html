@@ -1,0 +1,1641 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FEDEX 일괄발송 · 인보이스</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --ink:#22262b;
+    --muted:#6b7280;
+    --bg:#f4f2ee;
+    --card:#ffffff;
+    --accent:#a8425c;
+    --accent-dark:#7f2f45;
+    --teal:#3a5a63;
+    --line:#e4e0d8;
+    --good:#2f7d5a;
+    --warn:#8a6a10;
+    --bad:#a4342a;
+    --fedex:#4d148c;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    padding:32px 16px 64px;
+  }
+  .wrap{max-width:760px;margin:0 auto;}
+  .wrap-wide{max-width:1100px;margin:0 auto;}
+  a.back{
+    display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:var(--muted);
+    text-decoration:none;margin-bottom:16px;
+  }
+  header{margin-bottom:28px;}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:12px;letter-spacing:.06em;color:var(--accent-dark);
+    background:#f3e3e7;padding:4px 10px;border-radius:20px;
+    font-weight:600;
+  }
+  h1{font-size:25px;margin:14px 0 6px;letter-spacing:-.01em;}
+  .sub{color:var(--muted);font-size:14.5px;line-height:1.6;margin:0;}
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:24px;
+    margin-bottom:18px;
+  }
+  .step-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+  .step-num{
+    width:26px;height:26px;border-radius:50%;
+    background:var(--teal);color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;font-weight:700;flex:none;
+  }
+  .step-title{font-size:16px;font-weight:700;}
+  .step-side{margin-left:auto;font-size:12.5px;color:var(--muted);}
+
+  .drop{
+    border:1.5px dashed #c9c2b4;border-radius:10px;padding:28px 16px;
+    text-align:center;cursor:pointer;transition:border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.drag{border-color:var(--accent);background:#fbf3f5;}
+  .drop input{display:none;}
+  .drop .big{font-size:14.5px;font-weight:600;margin-bottom:4px;}
+  .drop .small{font-size:12.5px;color:var(--muted);}
+
+  .pills{display:flex;flex-wrap:wrap;gap:8px;}
+  .filepill{
+    display:inline-flex;align-items:center;gap:8px;
+    background:#eef0ee;border-radius:8px;padding:8px 12px;
+    font-size:13px;margin-top:12px;
+  }
+  .filepill .x{cursor:pointer;color:var(--muted);font-weight:700;}
+
+  .status{margin-top:14px;font-size:13.5px;padding:10px 12px;border-radius:8px;display:none;line-height:1.55;}
+  .status.show{display:block;}
+  .status.ok{background:#eaf5ef;color:var(--good);}
+  .status.err{background:#fbeceb;color:var(--bad);}
+  .status.busy{background:#eef1f6;color:var(--teal);}
+  .status.warn{background:#fff8e6;color:var(--warn);}
+
+  .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px;}
+  .stat{background:#f7f6f2;border-radius:10px;padding:12px 14px;}
+  .stat .num{font-size:20px;font-weight:800;color:var(--accent-dark);}
+  .stat .lbl{font-size:12px;color:var(--muted);margin-top:2px;}
+
+  .btn{
+    width:100%;border:none;border-radius:10px;padding:14px 16px;
+    font-size:14.5px;font-weight:700;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    background:var(--accent);color:#fff;margin-top:18px;
+    transition:opacity .15s, transform .1s;
+    font-family:inherit;
+  }
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn:not(:disabled):hover{transform:translateY(-1px);}
+  .btn-secondary{background:var(--teal);}
+  .btn-fedex{background:var(--fedex);}
+  .btn-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .btn-row .btn{margin-top:0;}
+
+  .mini{
+    border:none;background:#eceae4;color:var(--ink);border-radius:8px;
+    padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit;
+  }
+  .mini:hover{background:#e2dfd7;}
+  .mini.teal{background:var(--teal);color:#fff;}
+  .mini.accent{background:var(--accent);color:#fff;}
+  .mini.ghost{background:transparent;color:var(--muted);text-decoration:underline;padding:6px 4px;}
+  .mini:disabled{opacity:.4;cursor:not-allowed;}
+
+  .reset-link{
+    display:inline-block;margin-top:12px;font-size:12.5px;color:var(--muted);
+    text-decoration:underline;cursor:pointer;
+  }
+  footer{text-align:center;color:var(--muted);font-size:12px;margin-top:24px;line-height:1.7;}
+
+  /* 주문 선택 */
+  .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
+  .search{
+    flex:1;min-width:200px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;
+    font-size:13.5px;font-family:inherit;background:#fff;color:var(--ink);
+  }
+  .chk{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer;user-select:none;}
+  .olist{max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:10px;}
+  table.otable{width:100%;border-collapse:collapse;font-size:13px;}
+  .otable th{
+    position:sticky;top:0;background:#f7f6f2;text-align:left;font-weight:700;font-size:12px;
+    color:var(--muted);padding:9px 10px;border-bottom:1px solid var(--line);z-index:1;white-space:nowrap;
+  }
+  .otable td:nth-child(3){white-space:nowrap;}
+  .otable td{padding:9px 10px;border-bottom:1px solid #f0ede6;vertical-align:middle;}
+  .otable tr:hover td{background:#fbfaf7;}
+  .otable tr.on td{background:#fbf3f5;}
+  .otable .num{text-align:right;font-variant-numeric:tabular-nums;}
+  .tag{display:inline-block;font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;margin-left:4px;white-space:nowrap;}
+  .tag.bundle{background:#fff1cc;color:var(--warn);}
+  .tag.shipped{background:#eceae4;color:var(--muted);}
+  .tag.inb{background:#e6eef0;color:var(--teal);}
+
+  .bundle-box{
+    margin-top:14px;padding:14px 16px;background:#fff8e6;border:1px solid #f0d98c;border-radius:10px;
+  }
+  .bundle-box-head{font-size:13px;font-weight:700;color:var(--warn);margin-bottom:8px;}
+  .bundle-item{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:6px 0;font-size:13px;border-top:1px dashed #efdfae;}
+  .bundle-item:first-of-type{border-top:none;}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+  .chip{
+    display:inline-flex;align-items:center;gap:8px;background:#e6eef0;color:var(--teal);
+    border-radius:8px;padding:7px 11px;font-size:12.5px;font-weight:700;
+  }
+  .chip .x{cursor:pointer;color:var(--muted);}
+
+  /* 미리보기 */
+  .ship{border:1px solid var(--line);border-radius:12px;margin-top:14px;overflow:hidden;background:#fff;}
+  .ship-head{
+    display:flex;align-items:center;gap:10px;padding:12px 16px;background:#f7f6f2;cursor:pointer;flex-wrap:wrap;
+  }
+  .ship-idx{
+    width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:800;
+    display:flex;align-items:center;justify-content:center;flex:none;
+  }
+  .ship-title{font-weight:700;font-size:14.5px;}
+  .ship-meta{font-size:12.5px;color:var(--muted);}
+  .ship-badges{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+  .badge{font-size:11.5px;font-weight:700;border-radius:6px;padding:3px 8px;}
+  .badge.ok{background:#eaf5ef;color:var(--good);}
+  .badge.err{background:#fbeceb;color:var(--bad);}
+  .badge.warn{background:#fff1cc;color:var(--warn);}
+  .badge.total{background:#f3e3e7;color:var(--accent-dark);}
+  .caret{font-size:12px;color:var(--muted);transition:transform .15s;}
+  .ship.closed .caret{transform:rotate(-90deg);}
+  .ship.closed .ship-body{display:none;}
+  .ship-body{padding:16px;}
+
+  .sec-title{font-size:12.5px;font-weight:800;color:var(--teal);margin:4px 0 8px;letter-spacing:.02em;}
+  .grid{display:grid;gap:10px 12px;}
+  .g4{grid-template-columns:repeat(4,1fr);}
+  .g3{grid-template-columns:repeat(3,1fr);}
+  .g2{grid-template-columns:repeat(2,1fr);}
+  .span2{grid-column:span 2;}
+  .span3{grid-column:span 3;}
+  .span4{grid-column:1/-1;}
+  .f label{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-bottom:4px;font-weight:600;}
+  .f input,.f select,.f textarea{
+    width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;
+    font-family:inherit;background:#fff;color:var(--ink);
+  }
+  .f input:focus,.f select:focus,.f textarea:focus,.cell:focus{outline:2px solid #d9b3bd;border-color:var(--accent);}
+  .f.bad input,.f.bad select{border-color:#e3a39c;background:#fdf3f2;}
+  .f.warnf input{border-color:#ecd284;background:#fffbef;}
+  .cnt{font-weight:500;}
+  .cnt.over{color:var(--bad);font-weight:800;}
+  .divider{height:1px;background:var(--line);margin:16px 0;}
+
+  table.items{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .items th{background:#f7f6f2;color:var(--muted);font-size:11.5px;font-weight:700;padding:7px 6px;text-align:left;border-bottom:1px solid var(--line);}
+  .items td{padding:5px 6px;border-bottom:1px solid #f0ede6;vertical-align:middle;}
+  .items .r{text-align:right;font-variant-numeric:tabular-nums;}
+  .items .nm{max-width:330px;}
+  .items .nm div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .items .nm small{color:var(--muted);}
+  .items tr.coupon td{color:var(--accent-dark);background:#fcf6f7;}
+  .items tr.ordsep td{background:#eef3f4;color:var(--teal);font-weight:700;font-size:12px;}
+  .cell{
+    width:100%;padding:5px 6px;border:1px solid var(--line);border-radius:6px;font-size:12.5px;
+    font-family:inherit;text-align:right;background:#fff;color:var(--ink);
+  }
+  .cell.l{text-align:left;}
+  .cell.w60{width:62px;}
+  .cell.w70{width:72px;}
+  .cell.w90{width:96px;}
+  .changed{color:var(--accent-dark);font-weight:800;}
+  .strike{color:var(--muted);text-decoration:line-through;font-size:11.5px;margin-right:4px;}
+
+  .adjust{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#fbf3f5;border-radius:10px;padding:10px 12px;margin-bottom:10px;}
+  .adjust b{font-size:13px;color:var(--accent-dark);}
+  .adjust .cell{width:80px;}
+  .quick{display:flex;gap:6px;flex-wrap:wrap;}
+  .totals{display:flex;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin-top:12px;font-size:13px;}
+  .totals div{background:#f7f6f2;border-radius:8px;padding:8px 12px;}
+  .totals b{font-size:15px;color:var(--accent-dark);margin-left:6px;font-variant-numeric:tabular-nums;}
+  .ship-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap;}
+
+  .global-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px;}
+  .global-bar .f{min-width:150px;}
+
+  /* 설정 */
+  details.settings > summary{
+    list-style:none;cursor:pointer;font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px;
+  }
+  details.settings > summary::-webkit-details-marker{display:none;}
+  details.settings[open] > summary{margin-bottom:16px;}
+  .hint{font-size:12px;color:var(--muted);line-height:1.6;margin:6px 0 0;}
+  table.rules{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .rules td{padding:4px 4px;vertical-align:top;}
+  .rules input{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:7px;font-size:12.5px;font-family:inherit;}
+
+  .empty{text-align:center;color:var(--muted);font-size:13.5px;padding:26px 10px;}
+
+  @media (max-width:820px){
+    .g4{grid-template-columns:repeat(2,1fr);}
+    .g3{grid-template-columns:repeat(2,1fr);}
+    .span3{grid-column:1/-1;}
+    .btn-row{grid-template-columns:1fr;}
+    .summary{grid-template-columns:repeat(2,1fr);}
+    .items .nm{max-width:160px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="etsy.html">← ETSY 메뉴로 돌아가기</a>
+  <header>
+    <span class="eyebrow">ETSY · FEDEX 일괄발송</span>
+    <h1>주문 → 페덱스 일괄발송 · 인보이스</h1>
+    <p class="sub">엣시 Order Items 파일을 올리고 주문을 고르면, 페덱스 일괄발송 업로드 엑셀과 건별 인보이스(엑셀·PDF)를 만들어드려요. 파일은 브라우저 안에서만 처리되고 어디에도 저장되지 않아요.</p>
+  </header>
+
+  <!-- 1. 업로드 -->
+  <div class="card">
+    <div class="step-head">
+      <div class="step-num">1</div>
+      <div class="step-title">엣시 주문 파일 업로드</div>
+    </div>
+    <div class="drop" id="dropzone">
+      <input type="file" id="fileInput" accept=".csv" multiple>
+      <div class="big">클릭하거나 파일을 끌어다 놓으세요</div>
+      <div class="small">EtsySoldOrderItems*.csv — 여러 달 파일을 한꺼번에 올려도 돼요</div>
+    </div>
+    <div class="pills" id="pills"></div>
+    <div class="status" id="status1"></div>
+    <div class="summary" id="summary" style="display:none;">
+      <div class="stat"><div class="num" id="stOrders">0</div><div class="lbl">주문 수</div></div>
+      <div class="stat"><div class="num" id="stOpen">0</div><div class="lbl">미발송 주문</div></div>
+      <div class="stat"><div class="num" id="stRange">-</div><div class="lbl">주문 기간</div></div>
+    </div>
+  </div>
+
+  <!-- 2. 주문 선택 -->
+  <div class="card" id="card2">
+    <div class="step-head">
+      <div class="step-num">2</div>
+      <div class="step-title">주문 선택 · 묶음배송</div>
+      <div class="step-side" id="selInfo">선택 0건</div>
+    </div>
+    <div id="pickArea"><div class="empty">먼저 주문 파일을 올려 주세요.</div></div>
+  </div>
+</div>
+
+<!-- 3. 미리보기 (넓게) -->
+<div class="wrap-wide" id="step3" style="display:none;">
+  <div class="card">
+    <div class="step-head">
+      <div class="step-num">3</div>
+      <div class="step-title">미리보기 · 수정</div>
+      <div class="step-side" id="shipInfo"></div>
+    </div>
+    <div class="global-bar">
+      <span class="mini ghost" id="btnOpenAll">모두 펼치기</span>
+      <span class="mini ghost" id="btnCloseAll">모두 접기</span>
+    </div>
+    <div id="ships"></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <!-- 4. 내려받기 -->
+  <div class="card" id="step4" style="display:none;">
+    <div class="step-head">
+      <div class="step-num">4</div>
+      <div class="step-title">파일 만들기</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-fedex" id="btnFedex">✈️ 페덱스 업로드 엑셀</button>
+      <button class="btn btn-secondary" id="btnInvZip">🧾 인보이스 전체 (ZIP)</button>
+      <button class="btn" id="btnAll">📦 한 번에 모두 받기</button>
+    </div>
+    <div class="status" id="status4"></div>
+    <p class="hint">인보이스 ZIP에는 발송 건마다 엑셀(.xlsx)과 PDF가 하나씩 들어 있어요. 건별로 받으려면 미리보기 카드 아래 버튼을 쓰세요.</p>
+  </div>
+
+  <!-- 설정 -->
+  <div class="card">
+    <details class="settings" id="settingsBox">
+      <summary>⚙️ 기본 설정 <span style="font-weight:500;font-size:12.5px;color:var(--muted);">보내는 사람 · 세금번호 · 박스 · 기본값 (이 컴퓨터 브라우저에 저장)</span></summary>
+      <div id="settingsArea"></div>
+    </details>
+  </div>
+
+  <footer>페덱스 일괄발송(Batch upload) 양식 · 인보이스 A4 · 파일은 브라우저 안에서만 처리돼요</footer>
+</div>
+
+<script>
+/* =====================================================================
+   고정 데이터
+   ===================================================================== */
+const SIG_JPG = "data:image/jpeg;base64,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";
+const CODES = {"cc":{"Afghanistan":"AF","Albania":"AL","Algeria":"DZ","American Samoa":"AS","Andorra":"AD","Angola":"AO","Anguilla":"AI","Antarctica":"AQ","Antigua and Barbuda":"AG","Argentina":"AR","Armenia":"AM","Aruba":"AW","Australia":"AU","Austria":"AT","Azerbaijan":"AZ","Bahrain":"BH","Bahamas (the)":"BS","Bangladesh":"BD","Barbados":"BB","Belarus":"BY","Belgium":"BE","Belize":"BZ","Benin":"BJ","Bermuda":"BM","Bhutan":"BT","Bolivia (Pluractional State of)":"BO","Bonaire, Sint Eustatius, and Saba":"BQ","Bosnia and Herzegovina":"BA","Botswana":"BW","Bouvet Island":"BV","Brazil":"BR","British Indian Ocean Territory (the)":"IO","Brunei Darussalam":"BN","Bulgaria":"BG","Burkina Faso":"BF","Burundi":"BI","Cabo Verde":"CV","Cambodia":"KH","Cameroon":"CM","Canada":"CA","Cayman Islands (the)":"KY","Central African Republic (the)":"CF","Chad":"TD","Chile":"CL","China":"CN","Christmas Island":"CX","Cocos (Keeling) Islands (the)":"CC","Colombia":"CO","Comoros (the)":"KM","Congo (the Democratic Republic of the)":"CD","Congo (the)":"CG","Cook Islands (the)":"CK","Costa Rica":"CR","Croatia":"HR","Cuba":"CU","Curaçao":"CW","Cyprus":"CY","Czechia":"CZ","Cote d'Ivoire":"CI","Denmark":"DK","Djibouti":"DJ","Dominica":"DM","Dominican Republic (the)":"DO","Ecuador":"EC","Egypt":"EG","El Salvador":"SV","Equatorial Guinea":"GQ","Eritrea":"ER","Estonia":"EE","Eswatini":"SZ","Ethiopia":"ET","Falkland Islands (the) [Malvinas]":"FK","Faroe Islands (the)":"FO","Fiji":"FJ","Finland":"FI","France":"FR","French Guiana":"GF","French Polynesia":"PF","French Southern Territories (the)":"TF","Gabon":"GA","Gambia (the)":"GM","Georgia":"GE","Germany":"DE","Ghana":"GH","Gibraltar":"GI","Greece":"GR","Greenland":"GL","Grenada":"GD","Guadeloupe":"GP","Guam":"GU","Guatemala":"GT","Guernsey":"GG","Guinea":"GN","Guinea-Bissau":"GW","Guyana":"GY","Haiti":"HT","Heard Island and McDonald Islands":"HM","Honduras":"HN","Hong Kong":"HK","Hungary":"HU","Iceland":"IS","India":"IN","Indonesia":"ID","Iran (Islamic Republic of)":"IR","Iraq":"IQ","Ireland":"IE","Isle of Man":"IM","Israel":"IL","Italy":"IT","Jamaica":"JM","Japan":"JP","Jersey":"JE","Jordan":"JO","Kazakhstan":"KZ","Kenya":"KE","Kiribati":"KI","Korea (the Democratic People's Republic of)":"KP","Korea (the Republic of)":"KR","Kuwait":"KW","Kyrgyzstan":"KG","Lao People's Democratic Republic (the)":"LA","Latvia":"LV","Lebanon":"LB","Lesotho":"LS","Liberia":"LR","Libya":"LY","Liechtenstein":"LI","Lithuania":"LT","Luxembourg":"LU","Macao":"MO","Madagascar":"MG","Malawi":"MW","Malaysia":"MY","Maldives":"MV","Mali":"ML","Malta":"MT","Marshall Islands (the)":"MH","Martinique":"MQ","Mauritania":"MR","Mauritius":"MU","Mayotte":"YT","Mexico":"MX","Micronesia (Federated States of)":"FM","Moldova (the Republic of)":"MD","Monaco":"MC","Mongolia":"MN","Montenegro":"ME","Montserrat":"MS","Morocco":"MA","Mozambique":"MZ","Myanmar":"MM","Namibia":"NA","Nauru":"NR","Nepal":"NP","Netherlands (the)":"NL","New Caledonia":"NC","New Zealand":"NZ","Nicaragua":"NI","Niger (the)":"NE","Nigeria":"NG","Niue":"NU","Norfolk Island":"NF","Northern Mariana Islands (the)":"MP","Norway":"NO","Oman":"OM","Pakistan":"PK","Palau":"PW","Palestine, State of":"PS","Panama":"PA","Papua New Guinea":"PG","Paraguay":"PY","Peru":"PE","Philippines (the)":"PH","Pitcairn":"PN","Poland":"PL","Portugal":"PT","Puerto Rico":"PR","Qatar":"QA","Republic of North Macedonia":"MK","Romania":"RO","Russian Federation (the)":"RU","Rwanda":"RW","Reunion":"RE","Saint Barthelemy":"BL","Saint Helena, Ascension and Tristan da Cunha":"SH","Saint Kitts and Nevis":"KN","Saint Lucia":"LC","Saint Martin (French part)":"MF","Saint Pierre and Miquelon":"PM","Saint Vincent and the Grenadines":"VC","Samoa":"WS","Sao Tome and Principe":"ST","Saudi Arabia":"SA","Senegal":"SN","Serbia":"RS","Seychelles":"SC","Sierra Leone":"SL","Singapore":"SG","Sint Maarten (Dutch part)":"SX","Slovakia":"SK","Slovenia":"SI","Solomon Islands":"SB","Somalia":"SO","South Africa":"ZA","South Georgia and the South Sandwich Islands":"GS","South Sudan":"SS","Spain":"ES","Sri Lanka":"LK","Sudan (the)":"SD","Suriname":"SR","Svalbard and Jan Mayen":"SJ","Sweden":"SE","Switzerland":"CH","Syrian Arab Republic":"SY","Taiwan (Province of China)":"TW","Tajikistan":"TJ","Tanzania, United Republic of":"TZ","Thailand":"TH","Timor-Leste":"TL","Togo":"TG","Tokelau":"TK","Tonga":"TO","Trinidad and Tobago":"TT","Tunisia":"TN","Turkey":"TR","Turkmenistan":"TM","Turks and Caicos Islands (the)":"TC","Tuvalu":"TV","Uganda":"UG","Ukraine":"UA","United Arab Emirates (the)":"AE","United Kingdom of Great Britain and Northern Ireland (the)":"GB","United States Minor Outlying Islands (the)":"UM","United States of America (the)":"US","Uruguay":"UY","Uzbekistan":"UZ","Vanuatu":"VU","Venezuela (Bolivarian Republic of)":"VE","Viet Nam":"VN","Virgin Islands (British)":"VG","Virgin Islands (U.S.)":"VI","Wallis and Futuna":"WF","Western Sahara":"EH","Yemen":"YE","Zambia":"ZM","Zimbabwe":"ZW","Åland Islands":"AX"},"st":{"United States":{"ALASKA":"AK","ALABAMA":"AL","ARKANSAS":"AR","ARIZONA":"AZ","CALIFORNIA":"CA","COLORADO":"CO","CONNECTICUT":"CT","DISTRICT OF COLUMBIA":"DC","DELAWARE":"DE","FLORIDA":"FL","GEORGIA":"GA","HAWAII":"HI","IOWA":"IA","IDAHO":"ID","ILLINOIS":"IL","INDIANA":"IN","KANSAS":"KS","KENTUCKY":"KY","LOUISIANA":"LA","MASSACHUSETTS":"MA","MARYLAND":"MD","MAINE":"ME","MICHIGAN":"MI","MINNESOTA":"MN","MISSOURI":"MO","MISSISSIPPI":"MS","MONTANA":"MT","NORTH CAROLINA":"NC","NORTH DAKOTA":"ND","NEBRASKA":"NE","NEW HAMPSHIRE":"NH","NEW JERSEY":"NJ","NEW MEXICO":"NM","NEVADA":"NV","NEW YORK":"NY","OHIO":"OH","OKLAHOMA":"OK","OREGON":"OR","PENNSYLVANIA":"PA","RHODE ISLAND":"RI","SOUTH CAROLINA":"SC","SOUTH DAKOTA":"SD","TENNESSEE":"TN","TEXAS":"TX","UTAH":"UT","VIRGINIA":"VA","VERMONT":"VT","WASHINGTON":"WA","WISCONSIN":"WI","WEST VIRGINIA":"WV","WYOMING":"WY"},"Canada":{"ALBERTA":"AB","BRITISH COLUMBIA":"BC","MANITOBA":"MB","NEW BRUNSWICK":"NB","NEWFOUNDLAND AND LABRADOR":"NF","NOVA SCOTIA":"NS","NORTHWEST TERRITORIES":"NT","NUNAVUT":"NU","ONTARIO":"ON","PRINCE EDWARD ISLAND":"PE","QUEBEC":"PQ","SASKATCHEWAN":"SK","YUKON":"YT"},"Mexico":{"AGUASCALIENTES":"AG","BAJA CALIFORNIA NORTE":"BC","BAJA CALIFORNIA SUR":"BS","CHIHUAHUA":"CH","COLIMA":"CL","CAMPECHE":"CM","COAHUILA":"CO","CHIAPAS":"CS","DISTRITO FEDERAL":"DF","DURANGO":"DG","ESTADO DE MEXICO":"EM","GUERRERO":"GR","GUANAJUATO":"GT","HIDALGO":"HG","JALISCO":"JA","MICHOACAN":"MI","MORELOS":"MO","NAYARIT":"NA","NUEVO LEON":"NL","OAXACA":"OA","PUEBLA":"PU","QUERETARO":"QE","QUINTANA ROO":"QR","SINALOA":"SI","SAN LUIS POTOSI":"SL","SONORA":"SO","TABASCO":"TB","TLAXCALA":"TL","TAMAULIPAS":"TM","VERACRUZ":"VE","YUCATAN":"YU","ZACATECAS":"ZA"},"India":{"ANDAMAN & NICOBAR":"AN","ANDHRA PRADESH":"AP","ARUNACHAL PRADESH":"AR","ASSAM":"AS","BIHAR":"BR","CHHATTISGARH":"CG","CHANDIGARH":"CH","DAMAN & DIU":"DD","NEW DELHI":"DL","DADRA AND NAGAR HAVELI":"DN","GOA":"GA","GUJARAT":"GJ","HIMACHAL PRADESH":"HP","HARYANA":"HR","JHARKHAND":"JH","JAMMU & KASHMIR":"JK","KARNATAKA":"KA","KERALA":"KL","LAKSHADWEEP":"LD","MAHARASHTRA":"MH","MEGHALAYA":"ML","MANIPUR":"MN","MADHYA PRADESH":"MP","MIZORAM":"MZ","NAGALAND":"NL","ORISSA":"OR","PUNJAB":"PB","PUDUCHERRY":"PY","RAJASTHAN":"RJ","SIKKIM":"SK","TAMIL NADU":"TN","TRIPURA":"TR","TELANGANA":"TS","UTTAR PRADESH":"UP","UTTARANCHAL":"UT","WEST BENGAL":"WB"},"Brazil":{"ACRE":"AC","ALAGOAS":"AL","AMAZONAS":"AM","AMAPA":"AP","BAHIA":"BA","CEARA":"CE","DISTRITO FEDERAL":"DF","ESPIRITO SANTO":"ES","GOIAS":"GO","MARANHAO":"MA","MINAS GERAIS":"MG","MATO GROSSO DO SUL":"MS","MATO GROSSO":"MT","PARA":"PA","PARAIBA":"PB","PERNAMBUCO":"PE","PIAUI":"PI","PARANA":"PR","RIO DE JANEIRO":"RJ","RIO GRANDE DO NORTE":"RN","RONDONIA":"RO","RORAIMA":"RR","RIO GRANDE DO SUL":"RS","SANTA CATARINA":"SC","SERGIPE":"SE","SAO PAULO":"SP","TOCANTINS":"TO"}}};
+const FONT_URLS = {
+  normal: "https://cdn.jsdelivr.net/npm/@expo-google-fonts/noto-sans@0.4.2/400Regular/NotoSans_400Regular.ttf",
+  bold:   "https://cdn.jsdelivr.net/npm/@expo-google-fonts/noto-sans@0.4.2/700Bold/NotoSans_700Bold.ttf"
+};
+const EU = ["AT","BE","BG","HR","CY","CZ","DK","EE","FI","FR","DE","GR","HU","IE","IT","LV","LT","LU","MT","NL","PL","PT","RO","SK","SI","ES","SE"];
+const STATE_COUNTRY = {US:"United States",CA:"Canada",MX:"Mexico",IN:"India",BR:"Brazil"};
+const ZIP_REQUIRED = ["US","CA","GB","AU","DE","FR","IT","ES","NL","JP","CN","SG","NZ","KR"];
+const SERVICES = [
+  ["FEDEX_INTERNATIONAL_CONNECT_PLUS","International Connect Plus"],
+  ["FEDEX_INTERNATIONAL_PRIORITY","International Priority"]
+];
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+const DEFAULT_SETTINGS = {
+  sender: {
+    contact: "JI-HOON CHUNG",
+    company: "BEADSMAKER",
+    phone: "+82 31 915 5123",
+    email: "slosien@naver.com",
+    line1: "METROPOLICE BLDG ROOM 1002",
+    line2: "77, Jungang-ro 1261 beon-gil",
+    line3: "ILSANDONG-GU",
+    city: "GOYANG-SI",
+    postcode: "10401",
+    country: "KR",
+    invoiceBlock: "BEADSMAKER\nMETROPOLICE BLDG ROOM 1002\n77, Jungang-ro 1261 beon-gil\nGOYANG-SI ILSANDONG-GU 10401\nSouth Korea"
+  },
+  invoicePhone: "+82-31-915-5123",
+  purposeText: "Gift",
+  purposeCode: "GIFT",
+  origin: "South Korea",
+  description: "Craft Supplies (Pendants, Charms, Earrings and Necklace Findings, Etc)",
+  hs: "7117.19.90.00",
+  unit: "SET",
+  currency: "USD",
+  service: "FEDEX_INTERNATIONAL_CONNECT_PLUS",
+  pidPrefix: "BM",
+  special: "Order list or packing list is attached",
+  taxRules: [
+    {label:"유럽 (EU) · IOSS", countries:EU.join(","), value:"IM3720000224"},
+    {label:"영국", countries:"GB", value:"370 6004 28"},
+    {label:"싱가포르", countries:"SG", value:"SGM90373362R"}
+  ],
+  boxes: [
+    {name:"소", l:23, w:16, h:7, kg:0.49},
+    {name:"중", l:32, w:23, h:17, kg:3},
+    {name:"대", l:35, w:30, h:30, kg:4},
+    {name:"특대", l:35, w:30, h:45, kg:5}
+  ]
+};
+
+/* =====================================================================
+   상태
+   ===================================================================== */
+const S = {
+  files: [],          // {name, rows}
+  orders: new Map(),  // orderId -> order
+  selected: [],       // 선택 순서 유지
+  bundles: [],        // [[id,id], ...]
+  ships: [],          // 미리보기 발송 건
+  query: "",
+  onlyOpen: true,
+  settings: loadSettings()
+};
+let uid = 0;
+
+function loadSettings(){
+  try{
+    const raw = localStorage.getItem("etsyFedexSettings");
+    if(raw){
+      const s = JSON.parse(raw);
+      return Object.assign(structuredClone(DEFAULT_SETTINGS), s, {
+        sender: Object.assign(structuredClone(DEFAULT_SETTINGS.sender), s.sender||{})
+      });
+    }
+  }catch(e){}
+  return structuredClone(DEFAULT_SETTINGS);
+}
+function saveSettings(){
+  try{ localStorage.setItem("etsyFedexSettings", JSON.stringify(S.settings)); }catch(e){}
+}
+
+/* =====================================================================
+   유틸
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+const r2 = x => Math.round((Number(x)+Number.EPSILON)*100)/100;
+const num = v => { const n = parseFloat(String(v??"").replace(/[^0-9.\-]/g,"")); return isFinite(n)?n:0; };
+const money = x => (Math.round(x*100)/100).toFixed(2);
+const esc = s => String(s??"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function decodeEntities(s){
+  if(!s || s.indexOf("&")<0) return s||"";
+  const t = document.createElement("textarea"); t.innerHTML = s; return t.value;
+}
+function clean(s){ return decodeEntities(String(s??"")).replace(/\s+/g," ").trim(); }
+function setStatus(el, cls, msg){
+  el.className = "status show " + cls; el.innerHTML = msg;
+}
+function todayISO(){
+  const d = new Date(); const z = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`;
+}
+function etsyDateToISO(s){ // 10/16/26 or 10/16/2026
+  const m = String(s||"").match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if(!m) return todayISO();
+  let y = +m[3]; if(y<100) y += 2000;
+  return `${y}-${String(m[1]).padStart(2,"0")}-${String(m[2]).padStart(2,"0")}`;
+}
+function fmtInvDate(iso){ // 13-Oct 2026
+  const [y,m,d] = (iso||"").split("-").map(Number);
+  if(!y) return "";
+  return `${d}-${MONTHS[m-1]} ${y}`;
+}
+
+/* 국가 */
+const COUNTRY_MAP = (()=>{
+  const m = {};
+  const norm = s => s.toLowerCase().replace(/\(.*?\)/g,"").replace(/^the\s+/,"").replace(/[^a-z]/g,"");
+  for(const [name,code] of Object.entries(CODES.cc)) m[norm(name)] = code;
+  Object.assign(m, {
+    unitedstates:"US",usa:"US",unitedstatesofamerica:"US",unitedkingdom:"GB",uk:"GB",greatbritain:"GB",
+    netherlands:"NL",southkorea:"KR",korea:"KR",russia:"RU",russianfederation:"RU",vietnam:"VN",viet:"VN",
+    taiwan:"TW",czechrepublic:"CZ",czechia:"CZ",turkey:"TR",turkiye:"TR",iran:"IR",laos:"LA",bolivia:"BO",
+    venezuela:"VE",tanzania:"TZ",moldova:"MD",syria:"SY",macedonia:"MK",northmacedonia:"MK",hongkong:"HK",
+    macau:"MO",macao:"MO",vaticancity:"VA",palestine:"PS",micronesia:"FM",bahamas:"BS",gambia:"GM",
+    philippines:"PH",unitedarabemirates:"AE",dominicanrepublic:"DO",ivorycoast:"CI",cotedivoire:"CI",
+    brunei:"BN",capeverde:"CV",eswatini:"SZ",swaziland:"SZ",slovakia:"SK",puertorico:"PR"
+  });
+  m.__norm = norm;
+  return m;
+})();
+function countryCode(name){
+  const n = COUNTRY_MAP.__norm(name||"");
+  return COUNTRY_MAP[n] || "";
+}
+const CODE_TO_NAME = (()=>{
+  const m = {};
+  for(const [name,code] of Object.entries(CODES.cc)) if(!m[code]) m[code] = name.replace(/\s*\(the\)\s*/,"");
+  m.US="United States"; m.GB="United Kingdom"; m.NL="Netherlands"; m.KR="South Korea";
+  return m;
+})();
+function fedexState(code, state){
+  const list = CODES.st[STATE_COUNTRY[code]];
+  if(!list) return "";
+  const s = clean(state).toUpperCase();
+  if(!s) return "";
+  const vals = Object.values(list);
+  if(vals.includes(s)) return s;
+  return list[s] || "";
+}
+
+/* 전화번호 */
+const PHONE_RE = /(?:phone|tel|telephone|mobile|mob|cell|ph)\s*\.?\s*(?:no\.?|number|#)?\s*[:：\-]?\s*(\+?[\d][\d\s\-().]{5,}\d)/i;
+function extractPhone(lines){
+  let phone = ""; const rest = [];
+  for(const ln of lines){
+    if(!ln) continue;
+    const m = ln.match(PHONE_RE);
+    const bare = /^\s*\+\d[\d\s\-().]{6,}\s*$/.test(ln);
+    if(!phone && (m || bare)){
+      phone = String(m ? m[1] : ln).trim().replace(/^00/, "+").replace(/\s+/g," ");
+      const left = m ? (ln.slice(0, m.index) + ln.slice(m.index + m[0].length)).replace(/[,;\s]+$/,"").trim() : "";
+      if(left) rest.push(left);
+    } else rest.push(ln);
+  }
+  return {phone, rest};
+}
+function normPhone(p){
+  let s = String(p||"").trim();
+  if(!s) return "";
+  s = s.replace(/^00/, "+");
+  const plus = s.startsWith("+");
+  const digits = s.replace(/\D/g,"");
+  if(!digits) return "";
+  return (plus?"+":"") + digits;
+}
+function fmtPhoneForFedex(p){
+  const n = normPhone(p);
+  return n.length>15 ? n.replace("+","") : n;
+}
+
+/* 35자 줄 나누기 */
+function wrap35(lines){
+  const out = [];
+  for(const ln of lines){
+    let s = clean(ln);
+    while(s.length > 35){
+      let cut = s.lastIndexOf(" ", 35);
+      if(cut < 12) cut = s.lastIndexOf(",", 35)+1 || 35;
+      out.push(s.slice(0,cut).replace(/[,\s]+$/,""));
+      s = s.slice(cut).trim();
+    }
+    if(s) out.push(s);
+  }
+  return out;
+}
+
+/* SKU */
+function skuFromName(name){
+  const parts = String(name||"").split(" / ").map(s=>s.trim());
+  for(const p of parts.slice(0,3)){
+    if(/^[A-Z]{1,5}(-?[A-Z0-9]+)+$/.test(p) && /\d/.test(p)) return p.replace(/-/g,"");
+  }
+  return "";
+}
+
+/* =====================================================================
+   1. 파일 업로드
+   ===================================================================== */
+const drop = $("dropzone"), fileInput = $("fileInput");
+drop.addEventListener("click", ()=>fileInput.click());
+drop.addEventListener("dragover", e=>{e.preventDefault(); drop.classList.add("drag");});
+drop.addEventListener("dragleave", ()=>drop.classList.remove("drag"));
+drop.addEventListener("drop", e=>{e.preventDefault(); drop.classList.remove("drag"); addFiles(e.dataTransfer.files);});
+fileInput.addEventListener("change", ()=>{ addFiles(fileInput.files); fileInput.value=""; });
+
+async function addFiles(list){
+  const st = $("status1");
+  const files = [...list].filter(f=>/\.csv$/i.test(f.name));
+  if(!files.length){ setStatus(st,"err","CSV 파일만 올릴 수 있어요."); return; }
+  setStatus(st,"busy","파일을 읽는 중...");
+  let bad = [];
+  for(const f of files){
+    const text = await f.text();
+    const res = Papa.parse(text, {header:true, skipEmptyLines:true});
+    const rows = res.data;
+    if(!rows.length || !("Order ID" in rows[0]) || !("Item Name" in rows[0])){ bad.push(f.name); continue; }
+    S.files = S.files.filter(x=>x.name!==f.name);
+    S.files.push({name:f.name, rows});
+  }
+  rebuildOrders();
+  renderPills();
+  if(bad.length) setStatus(st,"err",`이 파일은 엣시 Order Items 형식이 아니에요: ${esc(bad.join(", "))}<br>Shop Manager → 설정 → 데이터 다운로드에서 <b>Order Items</b>로 받은 CSV를 올려 주세요.`);
+  else setStatus(st,"ok",`파일 ${S.files.length}개를 합쳐서 주문 ${S.orders.size}건을 찾았어요.`);
+}
+
+function rebuildOrders(){
+  const seen = new Set(); const orders = new Map();
+  for(const f of S.files){
+    for(const r of f.rows){
+      const oid = clean(r["Order ID"]); if(!oid) continue;
+      const key = clean(r["Transaction ID"]) || (oid+"|"+r["Item Name"]+"|"+r["Variations"]+"|"+r["Quantity"]+"|"+r["Price"]);
+      if(seen.has(key)) continue; seen.add(key);
+      let o = orders.get(oid);
+      if(!o){
+        o = {
+          id: oid,
+          saleDate: etsyDateToISO(r["Sale Date"]),
+          buyer: clean(r["Buyer"]),
+          name: clean(r["Ship Name"]),
+          addr1: clean(r["Ship Address1"]),
+          addr2: clean(r["Ship Address2"]),
+          city: clean(r["Ship City"]),
+          state: clean(r["Ship State"]),
+          zip: clean(r["Ship Zipcode"]),
+          country: clean(r["Ship Country"]),
+          shipped: clean(r["Date Shipped"]),
+          currency: clean(r["Currency"]) || "USD",
+          coupon: clean(r["Coupon Code"]),
+          couponDetails: clean(r["Coupon Details"]),
+          discount: 0,
+          items: []
+        };
+        orders.set(oid, o);
+      }
+      o.discount = Math.max(o.discount, num(r["Discount Amount"]));
+      if(!o.shipped && clean(r["Date Shipped"])) o.shipped = clean(r["Date Shipped"]);
+      const name = clean(r["Item Name"]);
+      const sku = skuFromName(name) || clean(r["SKU"]).replace(/-/g,"");
+      o.items.push({
+        name, variations: clean(r["Variations"]),
+        qty: Math.max(0, Math.round(num(r["Quantity"]))) || 1,
+        price: num(r["Price"]),
+        sku
+      });
+    }
+  }
+  for(const o of orders.values()){
+    o.subtotal = r2(o.items.reduce((a,i)=>a+i.qty*i.price,0));
+    o.code = countryCode(o.country);
+    o.addrKey = (o.name+"|"+o.addr1+"|"+o.zip).toLowerCase();
+  }
+  S.orders = orders;
+  S.selected = S.selected.filter(id=>orders.has(id));
+  S.bundles = S.bundles.map(b=>b.filter(id=>orders.has(id))).filter(b=>b.length>1);
+  renderSummary();
+  renderPick();
+}
+
+function renderPills(){
+  $("pills").innerHTML = S.files.map((f,i)=>`<span class="filepill">📄 ${esc(f.name)} <span style="color:var(--muted)">${f.rows.length}행</span> <span class="x" data-rm="${i}">✕</span></span>`).join("");
+  $("pills").querySelectorAll("[data-rm]").forEach(x=>x.onclick=()=>{
+    S.files.splice(+x.dataset.rm,1); rebuildOrders(); renderPills();
+    if(!S.files.length) $("status1").className="status";
+  });
+}
+function renderSummary(){
+  const os = [...S.orders.values()];
+  $("summary").style.display = os.length ? "grid":"none";
+  $("stOrders").textContent = os.length;
+  $("stOpen").textContent = os.filter(o=>!o.shipped).length;
+  if(os.length){
+    const ds = os.map(o=>o.saleDate).sort();
+    const f = d=>d.slice(5).replace("-","/");
+    $("stRange").textContent = `${f(ds[0])} ~ ${f(ds[ds.length-1])}`;
+  }
+}
+
+/* =====================================================================
+   2. 주문 선택
+   ===================================================================== */
+function bundleOf(id){ return S.bundles.find(b=>b.includes(id)); }
+function candidateGroups(){
+  // 같은 이름+주소+우편번호, 미발송, 2건 이상
+  const g = new Map();
+  for(const o of S.orders.values()){
+    if(o.shipped) continue;
+    if(!g.has(o.addrKey)) g.set(o.addrKey, []);
+    g.get(o.addrKey).push(o.id);
+  }
+  return [...g.values()].filter(a=>a.length>1);
+}
+
+function renderPick(){
+  const area = $("pickArea");
+  if(!S.orders.size){ area.innerHTML = `<div class="empty">먼저 주문 파일을 올려 주세요.</div>`; updateSelInfo(); return; }
+  if(!area.querySelector(".olist")){
+    area.innerHTML = `
+      <div class="toolbar">
+        <input class="search" id="q" placeholder="주문번호(여러 개는 띄어쓰기·줄바꿈) 또는 이름·국가 검색">
+        <label class="chk"><input type="checkbox" id="onlyOpen" ${S.onlyOpen?"checked":""}> 미발송만</label>
+        <button class="mini" id="btnSelShown">보이는 것 모두 선택</button>
+        <button class="mini ghost" id="btnClearSel">선택 해제</button>
+      </div>
+      <div class="olist"><table class="otable"><thead><tr>
+        <th style="width:34px;"></th><th>주문번호</th><th>주문일</th><th>수취인</th><th>국가</th><th class="num">상품</th><th class="num">금액</th>
+      </tr></thead><tbody id="obody"></tbody></table></div>
+      <div id="bundleArea"></div>
+      <button class="btn btn-secondary" id="btnPreview" disabled>미리보기 만들기</button>`;
+    $("q").addEventListener("input", e=>{ S.query = e.target.value; renderRows(); });
+    $("q").addEventListener("keydown", e=>{
+      if(e.key==="Enter"){ // 검색된 주문번호 바로 선택
+        const ids = parseIds(S.query).filter(id=>S.orders.has(id));
+        if(ids.length){ ids.forEach(id=>{ if(!S.selected.includes(id)) S.selected.push(id); }); renderRows(); renderBundles(); updateSelInfo(); }
+      }
+    });
+    $("onlyOpen").addEventListener("change", e=>{ S.onlyOpen = e.target.checked; renderRows(); });
+    $("btnSelShown").onclick = ()=>{ visibleOrders().forEach(o=>{ if(!S.selected.includes(o.id)) S.selected.push(o.id); }); renderRows(); renderBundles(); updateSelInfo(); };
+    $("btnClearSel").onclick = ()=>{ S.selected=[]; S.bundles=[]; renderRows(); renderBundles(); updateSelInfo(); };
+    $("btnPreview").onclick = buildShips;
+    $("obody").addEventListener("change", e=>{
+      const cb = e.target.closest("input[data-id]"); if(!cb) return;
+      toggleSel(cb.dataset.id, cb.checked);
+    });
+    $("obody").addEventListener("click", e=>{
+      const tr = e.target.closest("tr[data-id]"); if(!tr || e.target.tagName==="INPUT") return;
+      toggleSel(tr.dataset.id, !S.selected.includes(tr.dataset.id));
+    });
+  }
+  renderRows(); renderBundles(); updateSelInfo();
+}
+function parseIds(q){ return (q.match(/\d{6,}/g)||[]); }
+function visibleOrders(){
+  const q = S.query.trim().toLowerCase();
+  const ids = parseIds(q);
+  let os = [...S.orders.values()];
+  if(ids.length){
+    os = os.filter(o=>ids.some(i=>o.id.includes(i)));
+  } else if(q){
+    os = os.filter(o=>(o.id+" "+o.name+" "+o.buyer+" "+o.country).toLowerCase().includes(q));
+  }
+  if(S.onlyOpen && !ids.length) os = os.filter(o=>!o.shipped || S.selected.includes(o.id));
+  return os.sort((a,b)=> b.saleDate.localeCompare(a.saleDate) || b.id.localeCompare(a.id));
+}
+function toggleSel(id, on){
+  if(on){ if(!S.selected.includes(id)) S.selected.push(id); }
+  else{
+    S.selected = S.selected.filter(x=>x!==id);
+    S.bundles = S.bundles.map(b=>b.filter(x=>x!==id)).filter(b=>b.length>1);
+  }
+  renderRows(); renderBundles(); updateSelInfo();
+}
+function renderRows(){
+  const cands = new Set(candidateGroups().flat());
+  const os = visibleOrders();
+  $("obody").innerHTML = os.length ? os.map(o=>{
+    const on = S.selected.includes(o.id);
+    const b = bundleOf(o.id);
+    return `<tr data-id="${o.id}" class="${on?"on":""}">
+      <td><input type="checkbox" data-id="${o.id}" ${on?"checked":""}></td>
+      <td><b>#${o.id}</b>${b?`<span class="tag inb">묶음 ${S.bundles.indexOf(b)+1}</span>`:(cands.has(o.id)?`<span class="tag bundle">묶음 후보</span>`:"")}${o.shipped?`<span class="tag shipped">발송됨</span>`:""}</td>
+      <td>${o.saleDate.slice(5).replace("-","/")}</td>
+      <td>${esc(o.name)}</td>
+      <td>${esc(o.country)}</td>
+      <td class="num">${o.items.length}</td>
+      <td class="num">$${money(o.subtotal - o.discount)}</td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="7" class="empty">조건에 맞는 주문이 없어요.</td></tr>`;
+}
+function renderBundles(){
+  const area = $("bundleArea"); if(!area) return;
+  const sel = new Set(S.selected);
+  // 선택한 주문 중 같은 주소 그룹
+  const sugg = candidateGroups().filter(g=>g.some(id=>sel.has(id))).filter(g=>{
+    const b = bundleOf(g[0]); return !(b && g.every(id=>b.includes(id)));
+  });
+  let html = "";
+  if(sugg.length){
+    html += `<div class="bundle-box"><div class="bundle-box-head">📦 같은 고객·같은 주소의 주문이 더 있어요</div>` +
+      sugg.map((g,i)=>{
+        const o = S.orders.get(g[0]);
+        return `<div class="bundle-item"><span><b>${esc(o.name)}</b> · ${esc(o.country)} — ${g.map(id=>"#"+id).join(", ")}</span>
+          <button class="mini accent" data-sugg="${i}">한 박스로 묶기</button></div>`;
+      }).join("") + `</div>`;
+  }
+  const selFree = S.selected.filter(id=>!bundleOf(id));
+  html += `<div class="chips">` + S.bundles.map((b,i)=>`<span class="chip">묶음 ${i+1}: ${b.map(id=>"#"+id).join(" + ")} <span class="x" data-unb="${i}">✕</span></span>`).join("") +
+    (selFree.length>1 ? `<button class="mini teal" id="btnBundleSel">선택한 ${selFree.length}건 직접 묶기</button>`:"") + `</div>`;
+  area.innerHTML = html;
+  area.querySelectorAll("[data-sugg]").forEach(btn=>btn.onclick=()=>{
+    const g = sugg[+btn.dataset.sugg];
+    S.bundles = S.bundles.map(b=>b.filter(id=>!g.includes(id))).filter(b=>b.length>1);
+    g.forEach(id=>{ if(!S.selected.includes(id)) S.selected.push(id); });
+    S.bundles.push([...g]);
+    renderRows(); renderBundles(); updateSelInfo();
+  });
+  area.querySelectorAll("[data-unb]").forEach(x=>x.onclick=()=>{ S.bundles.splice(+x.dataset.unb,1); renderRows(); renderBundles(); updateSelInfo(); });
+  const bs = $("btnBundleSel");
+  if(bs) bs.onclick = ()=>{
+    const names = new Set(selFree.map(id=>S.orders.get(id).name.toLowerCase()));
+    if(names.size>1 && !confirm("받는 사람 이름이 서로 달라요. 그래도 한 박스로 묶을까요?")) return;
+    S.bundles.push([...selFree]); renderRows(); renderBundles(); updateSelInfo();
+  };
+}
+function groupsFromSelection(){
+  const done = new Set(); const groups = [];
+  for(const id of S.selected){
+    if(done.has(id)) continue;
+    const b = bundleOf(id);
+    const g = b ? b.filter(x=>S.selected.includes(x)) : [id];
+    g.forEach(x=>done.add(x)); groups.push(g);
+  }
+  return groups;
+}
+function updateSelInfo(){
+  const g = groupsFromSelection();
+  $("selInfo").textContent = `선택 ${S.selected.length}건 → 발송 ${g.length}건`;
+  const bp = $("btnPreview");
+  if(bp){ bp.disabled = !g.length; bp.textContent = g.length ? `미리보기 만들기 (발송 ${g.length}건)` : "미리보기 만들기"; }
+}
+
+/* =====================================================================
+   3. 미리보기 데이터
+   ===================================================================== */
+function taxIdFor(code){
+  for(const r of S.settings.taxRules){
+    const cs = String(r.countries||"").toUpperCase().split(/[\s,]+/).filter(Boolean);
+    if(cs.includes(code)) return r.value;
+  }
+  return "";
+}
+function couponLabel(o){
+  if(!o.discount) return "";
+  const pct = o.subtotal ? Math.round(o.discount/o.subtotal*100) : 0;
+  const code = [...new Set(String(o.coupon||"").split(/[;,]/).map(x=>x.trim()).filter(Boolean))].join(", ") || "Discount";
+  const fixed = /\$|fixed|amount/i.test(o.couponDetails) && !/%/.test(o.couponDetails);
+  return fixed ? `${code} (-$${money(o.discount)})` : `${code} (${pct}% off)`;
+}
+function makeShip(ids){
+  const os = ids.map(id=>S.orders.get(id));
+  const o = os[0];
+  const {phone, rest} = extractPhone([o.addr1, o.addr2]);
+  const lines = wrap35(rest);
+  const box = S.settings.boxes[0] || {l:23,w:16,h:7,kg:0.49};
+  const lns = []; const coupons = [];
+  for(const od of os){
+    for(const it of od.items){
+      lns.push({oid:od.id, name:it.name, variations:it.variations, sku:it.sku,
+        pid: it.sku ? S.settings.pidPrefix + it.sku : "",
+        qty:it.qty, price:it.price, pct:0, minus:0});
+    }
+    if(od.discount>0) coupons.push({oid:od.id, label:couponLabel(od), rate: od.subtotal? od.discount/od.subtotal : 0, fixed:false, origAmt: od.discount});
+  }
+  return {
+    uid: ++uid, ids, open: true,
+    name: o.name, company:"", phone, email:"", tin:"",
+    line1: lines[0]||"", line2: lines[1]||"", line3: lines.slice(2).join(" "),
+    city: o.city, state: o.state, zip: o.zip,
+    code: o.code, countryName: o.country,
+    boxIdx: 0, l: box.l, w: box.w, h: box.h, kg: box.kg,
+    service: S.settings.service,
+    taxId: taxIdFor(o.code),
+    hs: S.settings.hs, desc: S.settings.description,
+    invDate: os.map(x=>x.saleDate).sort().slice(-1)[0],
+    shipDate: todayISO(),
+    globalPct: 0,
+    lines: lns, coupons,
+    origTotal: r2(os.reduce((a,x)=>a + x.subtotal - x.discount, 0))
+  };
+}
+function buildShips(){
+  const groups = groupsFromSelection();
+  const keep = new Map(S.ships.map(s=>[s.ids.join(","), s]));
+  S.ships = groups.map(g=> keep.get(g.join(",")) || makeShip(g));
+  renderShips();
+  $("step3").style.display = "block"; $("step4").style.display = "block";
+  $("status4").className = "status";
+  $("step3").scrollIntoView({behavior:"smooth", block:"start"});
+}
+
+/* 금액 계산: 상품별 %·단가 차감 → 전체 % → 쿠폰(비율) */
+function calc(s){
+  const g = 1 - (num(s.globalPct)/100);
+  const rows = s.lines.map(l=>{
+    let u = l.price * (1 - num(l.pct)/100) - num(l.minus);
+    u = Math.max(0, u) * g;
+    u = r2(u);
+    return {unit:u, amount: r2(u * l.qty)};
+  });
+  const byOrder = {};
+  s.lines.forEach((l,i)=>{ byOrder[l.oid] = (byOrder[l.oid]||0) + rows[i].amount; });
+  const cps = s.coupons.map(c=>{
+    const base = byOrder[c.oid]||0;
+    return {amount: -r2(base * c.rate)};
+  });
+  const total = r2(rows.reduce((a,r)=>a+r.amount,0) + cps.reduce((a,c)=>a+c.amount,0));
+  const qty = s.lines.length;
+  return {rows, cps, total, qty, unitValue: qty? r2(total/qty) : 0};
+}
+
+function issues(s){
+  const e = [], w = [];
+  if(!s.name) e.push("이름");
+  if(s.name.length>35) e.push("이름 35자 초과");
+  if(!normPhone(s.phone)) e.push("전화번호 없음");
+  else if(fmtPhoneForFedex(s.phone).length>15) e.push("전화번호 15자 초과");
+  if(!s.line1) e.push("주소");
+  [s.line1,s.line2,s.line3].forEach((x,i)=>{ if((x||"").length>35) e.push(`주소${i+1} 35자 초과`); });
+  if(!s.city) e.push("도시");
+  if(!s.code) e.push("국가 코드");
+  if(!s.zip && ZIP_REQUIRED.includes(s.code)) e.push("우편번호");
+  else if(!s.zip) w.push("우편번호 없음");
+  if(STATE_COUNTRY[s.code] && !fedexState(s.code, s.state)) e.push("주(State) 코드");
+  if(!(num(s.kg)>0)) e.push("무게");
+  if(!s.hs) w.push("HS코드 없음");
+  if(!s.taxId && (EU.includes(s.code) || s.code==="GB")) w.push("세금번호 비어 있음");
+  return {e, w};
+}
+
+/* =====================================================================
+   3. 미리보기 화면
+   ===================================================================== */
+function fld(s, key, label, opt={}){
+  const v = s[key] ?? "";
+  const max = opt.max;
+  const cnt = max ? `<span class="cnt ${String(v).length>max?"over":""}" data-cnt="${key}">${String(v).length}/${max}</span>` : "";
+  return `<div class="f ${opt.cls||""}" data-f="${key}"><label>${label}${cnt}</label>
+    <input data-k="${key}" value="${esc(v)}" ${opt.type?`type="${opt.type}"`:""} ${opt.ph?`placeholder="${esc(opt.ph)}"`:""} ${opt.step?`step="${opt.step}"`:""}></div>`;
+}
+function renderShips(){
+  $("shipInfo").textContent = `발송 ${S.ships.length}건`;
+  $("ships").innerHTML = S.ships.map((s,i)=>shipHTML(s,i)).join("") || `<div class="empty">발송 건이 없어요.</div>`;
+  S.ships.forEach(refreshShip);
+}
+function shipHTML(s, i){
+  const bx = S.settings.boxes;
+  const boxOpts = bx.map((b,j)=>`<option value="${j}" ${s.boxIdx==j?"selected":""}>${esc(b.name)} · ${b.l}×${b.w}×${b.h}cm · ${b.kg}kg</option>`).join("") +
+    `<option value="-1" ${s.boxIdx==-1?"selected":""}>직접 입력</option>`;
+  const svc = SERVICES.map(([v,t])=>`<option value="${v}" ${s.service===v?"selected":""}>${t}</option>`).join("");
+  const countryOpts = `<option value="" ${s.code?"":"selected"}>— 국가 선택 (${esc(s.countryName)}) —</option>` + Object.entries(CODE_TO_NAME).sort((a,b)=>a[1].localeCompare(b[1])).map(([c,n])=>`<option value="${c}" ${s.code===c?"selected":""}>${esc(n)} (${c})</option>`).join("");
+  let lastOid = null;
+  const multi = s.ids.length>1;
+  let rowsHTML = "";
+  s.lines.forEach((l,j)=>{
+    if(multi && l.oid!==lastOid){
+      rowsHTML += `<tr class="ordsep"><td colspan="9">주문 #${l.oid}</td></tr>`; lastOid = l.oid;
+    }
+    rowsHTML += `<tr data-line="${j}">
+      <td class="r">${j+1}</td>
+      <td class="nm"><div title="${esc(l.name)}">${esc(l.name)}</div>${l.variations?`<small>${esc(l.variations)}</small>`:""}</td>
+      <td><input class="cell l w90" data-lk="sku" value="${esc(l.sku)}"></td>
+      <td class="r"><input class="cell w60" data-lk="qty" type="number" min="0" step="1" value="${l.qty}"></td>
+      <td class="r">$${money(l.price)}</td>
+      <td class="r"><input class="cell w60" data-lk="pct" type="number" min="0" max="100" step="1" value="${l.pct||""}" placeholder="%"></td>
+      <td class="r"><input class="cell w60" data-lk="minus" type="number" min="0" step="0.01" value="${l.minus||""}" placeholder="$"></td>
+      <td class="r" data-out="unit"></td>
+      <td class="r" data-out="amt"></td>
+    </tr>`;
+    const cIdx = s.coupons.findIndex(c=>c.oid===l.oid);
+    const nextOid = s.lines[j+1] ? s.lines[j+1].oid : null;
+    if(cIdx>=0 && nextOid!==l.oid){
+      rowsHTML += `<tr class="coupon"><td></td><td colspan="6">🏷️ ${esc(s.coupons[cIdx].label)} <small style="color:var(--muted)">(조정된 금액에 같은 비율로 적용)</small></td><td></td><td class="r" data-cp="${cIdx}"></td></tr>`;
+    }
+  });
+  return `<div class="ship ${s.open?"":"closed"}" data-uid="${s.uid}">
+    <div class="ship-head" data-toggle>
+      <span class="caret">▼</span>
+      <div class="ship-idx">${i+1}</div>
+      <div><div class="ship-title">${esc(s.name)} <span class="ship-meta">· ${esc(CODE_TO_NAME[s.code]||s.countryName)}</span></div>
+        <div class="ship-meta">${s.ids.map(x=>"#"+x).join(" + ")}${multi?" (묶음)":""}</div></div>
+      <div class="ship-badges" data-badges></div>
+    </div>
+    <div class="ship-body">
+      <div class="sec-title">받는 사람</div>
+      <div class="grid g4">
+        ${fld(s,"name","이름",{max:35,cls:"span2"})}
+        ${fld(s,"phone","전화번호 (국가번호 포함)",{ph:"+1 5551234567"})}
+        ${fld(s,"email","이메일 (선택)")}
+        ${fld(s,"line1","주소 1",{max:35,cls:"span2"})}
+        ${fld(s,"line2","주소 2",{max:35,cls:"span2"})}
+        ${fld(s,"line3","주소 3",{max:35,cls:"span2"})}
+        ${fld(s,"company","회사명 (선택)")}
+        ${fld(s,"tin","수취인 Tax ID (선택)")}
+        ${fld(s,"city","도시")}
+        ${fld(s,"state","주 / 지역",{ph: STATE_COUNTRY[s.code]?"예: CA, NY":""})}
+        ${fld(s,"zip","우편번호")}
+        <div class="f" data-f="code"><label>국가</label><select data-k="code">${countryOpts}</select></div>
+      </div>
+      <div class="divider"></div>
+      <div class="sec-title">발송 · 통관</div>
+      <div class="grid g4">
+        <div class="f span2"><label>박스</label><select data-k="boxIdx">${boxOpts}</select></div>
+        <div class="f"><label>배송 서비스</label><select data-k="service">${svc}</select></div>
+        ${fld(s,"taxId","IOSS / EORI / 세금번호")}
+        ${fld(s,"l","가로 (cm)",{type:"number",step:"0.1"})}
+        ${fld(s,"w","세로 (cm)",{type:"number",step:"0.1"})}
+        ${fld(s,"h","높이 (cm)",{type:"number",step:"0.1"})}
+        ${fld(s,"kg","무게 (kg)",{type:"number",step:"0.01"})}
+        ${fld(s,"hs","HS 코드")}
+        ${fld(s,"desc","품명 (Description of Goods)",{cls:"span3"})}
+        ${fld(s,"invDate","인보이스 날짜 (주문일)",{type:"date"})}
+        ${fld(s,"shipDate","Ship Date (발송일)",{type:"date"})}
+      </div>
+      <div class="divider"></div>
+      <div class="sec-title">상품 · 신고 금액</div>
+      <div class="adjust">
+        <b>전체 할인</b>
+        <input class="cell" data-k="globalPct" type="number" min="0" max="100" step="1" value="${s.globalPct||""}" placeholder="0"> %
+        <div class="quick">${[10,20,30,40,50].map(p=>`<button class="mini" data-quick="${p}">${p}%</button>`).join("")}<button class="mini ghost" data-quick="0">초기화</button></div>
+        <span style="font-size:12px;color:var(--muted);">상품별 % · 단가 차감 → 전체 % → 쿠폰 순서로 적용돼요</span>
+      </div>
+      <div style="overflow-x:auto;">
+      <table class="items"><thead><tr>
+        <th class="r">No</th><th>상품명</th><th>SKU</th><th class="r">수량</th><th class="r">원래 단가</th><th class="r">할인 %</th><th class="r">단가 차감</th><th class="r">신고 단가</th><th class="r">금액</th>
+      </tr></thead><tbody>${rowsHTML}</tbody></table>
+      </div>
+      <div class="totals">
+        <div>원래 금액 <b data-out="orig">$${money(s.origTotal)}</b></div>
+        <div>인보이스 수량 <b data-out="qty"></b></div>
+        <div>Unit Value <b data-out="uv"></b></div>
+        <div>신고 총액 <b data-out="total"></b></div>
+      </div>
+      <div class="ship-actions">
+        <button class="mini" data-act="pdf">🔍 인보이스 PDF 보기</button>
+        <button class="mini" data-act="xlsx">⬇ 인보이스 엑셀</button>
+        <button class="mini" data-act="pdfdl">⬇ 인보이스 PDF</button>
+        <button class="mini ghost" data-act="remove">이 건 빼기</button>
+      </div>
+    </div>
+  </div>`;
+}
+function shipByEl(el){ const c = el.closest(".ship"); return c ? S.ships.find(s=>s.uid==c.dataset.uid) : null; }
+function refreshShip(s){
+  const card = document.querySelector(`.ship[data-uid="${s.uid}"]`); if(!card) return;
+  const c = calc(s);
+  card.querySelectorAll("tr[data-line]").forEach(tr=>{
+    const j = +tr.dataset.line, l = s.lines[j], r = c.rows[j];
+    const changed = Math.abs(r.unit - l.price) > 0.0001;
+    tr.querySelector('[data-out="unit"]').innerHTML = changed ? `<span class="strike">$${money(l.price)}</span><span class="changed">$${money(r.unit)}</span>` : `$${money(r.unit)}`;
+    tr.querySelector('[data-out="amt"]').innerHTML = `<span class="${changed?"changed":""}">$${money(r.amount)}</span>`;
+  });
+  card.querySelectorAll("[data-cp]").forEach(td=>{ td.textContent = "-$"+money(-c.cps[+td.dataset.cp].amount); });
+  card.querySelector('[data-out="qty"]').textContent = c.qty;
+  card.querySelector('[data-out="uv"]').textContent = "$"+money(c.unitValue);
+  card.querySelector('[data-out="total"]').textContent = "$"+money(c.total);
+  const {e,w} = issues(s);
+  const badges = [];
+  e.forEach(x=>badges.push(`<span class="badge err">${esc(x)}</span>`));
+  w.forEach(x=>badges.push(`<span class="badge warn">${esc(x)}</span>`));
+  if(!e.length && !w.length) badges.push(`<span class="badge ok">준비 완료</span>`);
+  badges.push(`<span class="badge total">$${money(c.total)}</span>`);
+  card.querySelector("[data-badges]").innerHTML = badges.join("");
+  // 필드 강조
+  const bad = new Set();
+  e.forEach(x=>{
+    if(/이름/.test(x)) bad.add("name");
+    if(/전화/.test(x)) bad.add("phone");
+    if(/^주소$/.test(x)) bad.add("line1");
+    const m = x.match(/주소(\d)/); if(m) bad.add("line"+m[1]);
+    if(/도시/.test(x)) bad.add("city");
+    if(/우편/.test(x)) bad.add("zip");
+    if(/State/.test(x)) bad.add("state");
+    if(/국가/.test(x)) bad.add("code");
+    if(/무게/.test(x)) bad.add("kg");
+  });
+  card.querySelectorAll(".f[data-f]").forEach(f=>{
+    f.classList.toggle("bad", bad.has(f.dataset.f));
+  });
+  const tf = card.querySelector('.f[data-f="taxId"]');
+  if(tf) tf.classList.toggle("warnf", w.some(x=>/세금/.test(x)));
+}
+
+const shipsEl = $("ships");
+shipsEl.addEventListener("click", e=>{
+  const s = shipByEl(e.target); if(!s) return;
+  if(e.target.closest("[data-toggle]")){
+    s.open = !s.open; e.target.closest(".ship").classList.toggle("closed", !s.open); return;
+  }
+  const q = e.target.closest("[data-quick]");
+  if(q){
+    s.globalPct = +q.dataset.quick;
+    const inp = e.target.closest(".ship").querySelector('[data-k="globalPct"]');
+    inp.value = s.globalPct || ""; refreshShip(s); return;
+  }
+  const a = e.target.closest("[data-act]");
+  if(a){
+    const act = a.dataset.act;
+    if(act==="remove"){
+      if(!confirm("이 발송 건을 미리보기에서 뺄까요? (선택도 해제돼요)")) return;
+      S.ships = S.ships.filter(x=>x!==s);
+      S.selected = S.selected.filter(id=>!s.ids.includes(id));
+      S.bundles = S.bundles.filter(b=>!b.some(id=>s.ids.includes(id)));
+      renderShips(); renderRows(); renderBundles(); updateSelInfo();
+    }
+    if(act==="pdf") openPdf(s, a);
+    if(act==="pdfdl") downloadPdf(s, a);
+    if(act==="xlsx") downloadInvXlsx(s, a);
+  }
+});
+shipsEl.addEventListener("input", e=>{
+  const s = shipByEl(e.target); if(!s) return;
+  const t = e.target;
+  if(t.dataset.k){
+    const k = t.dataset.k;
+    if(k==="boxIdx") return;
+    s[k] = t.value;
+    if(k==="code"){ s.countryName = CODE_TO_NAME[t.value]||t.value; s.taxId = taxIdFor(t.value); const ti = t.closest(".ship").querySelector('[data-k="taxId"]'); if(ti) ti.value = s.taxId; }
+    if(["l","w","h","kg"].includes(k)){ s.boxIdx = -1; t.closest(".ship").querySelector('[data-k="boxIdx"]').value = "-1"; }
+    const cnt = t.closest(".ship").querySelector(`[data-cnt="${k}"]`);
+    if(cnt){ cnt.textContent = `${t.value.length}/35`; cnt.classList.toggle("over", t.value.length>35); }
+    if(k==="name") t.closest(".ship").querySelector(".ship-title").firstChild.textContent = t.value + " ";
+    refreshShip(s);
+  } else if(t.dataset.lk){
+    const j = +t.closest("tr").dataset.line, l = s.lines[j], k = t.dataset.lk;
+    if(k==="sku"){ l.sku = t.value.trim(); l.pid = l.sku ? S.settings.pidPrefix + l.sku : ""; }
+    else if(k==="qty") l.qty = Math.max(0, Math.round(num(t.value)));
+    else l[k] = num(t.value);
+    refreshShip(s);
+  }
+});
+shipsEl.addEventListener("change", e=>{
+  const s = shipByEl(e.target); if(!s) return;
+  if(e.target.dataset.k==="boxIdx"){
+    s.boxIdx = +e.target.value;
+    const b = S.settings.boxes[s.boxIdx];
+    const card = e.target.closest(".ship");
+    if(b){ ["l","w","h","kg"].forEach(k=>{ s[k]=b[k]; card.querySelector(`[data-k="${k}"]`).value = b[k]; }); }
+    refreshShip(s);
+  }
+});
+$("btnOpenAll").onclick = ()=>{ S.ships.forEach(s=>s.open=true); document.querySelectorAll(".ship").forEach(x=>x.classList.remove("closed")); };
+$("btnCloseAll").onclick = ()=>{ S.ships.forEach(s=>s.open=false); document.querySelectorAll(".ship").forEach(x=>x.classList.add("closed")); };
+
+/* =====================================================================
+   인보이스 공통 데이터
+   ===================================================================== */
+function consigneeLines(s){
+  const cityLine = (()=>{
+    const st = clean(s.state), z = clean(s.zip), c = clean(s.city);
+    if(["US","CA","AU"].includes(s.code)) return [c && (c + (st?",":"")), st, z].filter(Boolean).join(" ");
+    return [z, c].filter(Boolean).join(" ") + (st ? ", " + st : "");
+  })();
+  return [s.name, s.company, s.line1, s.line2, s.line3, cityLine, CODE_TO_NAME[s.code]||s.countryName].filter(x=>clean(x));
+}
+function invoiceData(s){
+  const c = calc(s);
+  const st = S.settings;
+  const list = [];
+  let lastOid = null;
+  s.lines.forEach((l,j)=>{
+    if(s.ids.length>1 && l.oid!==lastOid){ list.push({sep:true, text:`Order #${l.oid}`}); lastOid = l.oid; }
+    list.push({name:l.name, sku:l.sku, pid:l.pid, qty:l.qty, unit:c.rows[j].unit, amount:c.rows[j].amount});
+    const ci = s.coupons.findIndex(cp=>cp.oid===l.oid);
+    const nextOid = s.lines[j+1] ? s.lines[j+1].oid : null;
+    if(ci>=0 && nextOid!==l.oid) list.push({name:s.coupons[ci].label, sku:"", pid:"", qty:1, unit:c.cps[ci].amount, amount:c.cps[ci].amount, coupon:true});
+  });
+  // 번호 매기기 (구분줄 제외)
+  let n = 0; list.forEach(x=>{ if(!x.sep) x.no = ++n; });
+  return {
+    orderNo: s.ids.map(x=>"#"+x).join(", "),
+    invDate: fmtInvDate(s.invDate), shipDate: fmtInvDate(s.shipDate),
+    taxId: s.taxId,
+    sender: st.sender, senderPhone: st.invoicePhone,
+    purpose: st.purposeText, origin: st.origin, remark: s.desc,
+    consignee: {tin:s.tin, name:s.name, phone: s.phone ? prettyPhone(s.phone) : "", email:s.email, lines: consigneeLines(s)},
+    desc: s.desc, hs: s.hs, qty: c.qty, unitValue: c.unitValue, total: c.total,
+    currency: st.currency, special: st.special, list
+  };
+}
+function prettyPhone(p){
+  return String(p||"").trim().replace(/^00/, "+").replace(/\s+/g," ");
+}
+function fileBase(s){
+  const nm = (s.name||"invoice").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"") || "invoice";
+  const [y,m,d] = (s.invDate||todayISO()).split("-");
+  return `${nm}${m}-${d}`;
+}
+
+/* =====================================================================
+   PDF (jsPDF)
+   ===================================================================== */
+let FONT_STATE = null; // {ok:bool, normal, bold}
+async function loadFonts(){
+  if(FONT_STATE) return FONT_STATE;
+  const toB64 = buf => { let s=""; const b=new Uint8Array(buf); for(let i=0;i<b.length;i+=0x8000) s+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000)); return btoa(s); };
+  try{
+    const [a,b] = await Promise.all([fetch(FONT_URLS.normal), fetch(FONT_URLS.bold)]);
+    if(!a.ok||!b.ok) throw 0;
+    FONT_STATE = {ok:true, normal: toB64(await a.arrayBuffer()), bold: toB64(await b.arrayBuffer())};
+  }catch(e){ FONT_STATE = {ok:false}; }
+  return FONT_STATE;
+}
+async function buildPdf(s){
+  const fonts = await loadFonts();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:"mm", format:"a4"});
+  let F = "helvetica";
+  if(fonts.ok){
+    doc.addFileToVFS("NotoSans-Regular.ttf", fonts.normal); doc.addFont("NotoSans-Regular.ttf","Noto","normal");
+    doc.addFileToVFS("NotoSans-Bold.ttf", fonts.bold); doc.addFont("NotoSans-Bold.ttf","Noto","bold");
+    F = "Noto";
+  }
+  const T = t => fonts.ok ? String(t??"") : String(t??"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^\x00-\xff]/g,"?");
+  const D = invoiceData(s);
+  const X0 = 12, X1 = 198, MID = 108, W = X1-X0;
+  const font = (st, sz) => { doc.setFont(F, st); doc.setFontSize(sz); };
+  const txt = (t, x, y, o) => doc.text(T(t), x, y, o);
+  const lw = (w) => doc.setLineWidth(w);
+  const labelVal = (label, val, x, y, gap) => { font("bold",8.5); txt(label, x, y); font("normal",8.5); txt(val, x + (gap ?? (doc.getTextWidth(T(label))+1.5)), y); };
+
+  /* ---------- 1페이지: COMMERCIAL INVOICE ---------- */
+  font("bold",16); txt("COMMERCIAL INVOICE", 105, 16, {align:"center"});
+  lw(0.3);
+  const yTop = 20, yCons = 74, yTable = 134, yTableHead = 143, ySpecial = 220, ySigned = 242, yEnd = 268;
+  doc.rect(X0, yTop, W, yEnd-yTop);
+  doc.line(MID, yTop, MID, yTable);
+  doc.line(X0, yCons, X1, yCons);
+  // shipper
+  let y = yTop + 5;
+  font("bold",8.5); txt("SHIPPER/EXPORTER", X0+2, y); y += 4.6;
+  labelVal("Tax ID#: ", D.taxId, X0+2, y); y += 4.6;
+  labelVal("Contact Name: ", D.sender.contact, X0+2, y); y += 4.6;
+  labelVal("TEL: ", D.senderPhone, X0+2, y); y += 4.6;
+  labelVal("E-Mail: ", D.sender.email, X0+2, y); y += 4.6;
+  font("bold",8.5); txt("Company Name/Address:", X0+2, y); y += 4.6;
+  font("normal",8.5);
+  String(D.sender.invoiceBlock||"").split("\n").forEach(ln=>{ txt(ln, X0+2, y); y += 4.6; });
+  // right top
+  y = yTop + 5;
+  labelVal("INVOICE/Order No.:", "", MID+2, y);
+  font("bold",8.5); const onoLines = doc.splitTextToSize(T(D.orderNo), X1-(MID+38)-2); onoLines.forEach((ln,i)=>doc.text(ln, MID+38, y + i*4.2)); y += 4.6 + (onoLines.length-1)*4.2;
+  labelVal("DATE OF INVOICE:", "", MID+2, y); font("normal",8.5); txt(D.invDate, MID+38, y); y += 4.6;
+  labelVal("Ship Date:", "", MID+2, y); font("normal",8.5); txt(D.shipDate, MID+38, y);
+  doc.line(MID, yTop+30, X1, yTop+30);
+  y = yTop + 36;
+  labelVal("PURPOSE OF SHIPMENT: ", D.purpose, MID+2, y); y += 4.6;
+  labelVal("ORIGIN OF COUNTRY: ", D.origin, MID+2, y); y += 4.6;
+  font("bold",8.5); txt("REMARK:", MID+2, y); font("normal",8.5);
+  doc.splitTextToSize(T(D.remark), X1-(MID+18)-2).slice(0,4).forEach((ln,i)=>doc.text(ln, MID+18, y + i*4.2));
+  // consignee
+  y = yCons + 5;
+  font("bold",8.5); txt("CONSIGNEE", X0+2, y); y += 4.6;
+  labelVal("Tax ID#: ", D.consignee.tin, X0+2, y); y += 4.6;
+  labelVal("Contact Name : ", D.consignee.name, X0+2, y); y += 4.6;
+  labelVal("TEL : ", D.consignee.phone, X0+2, y); y += 4.6;
+  labelVal("E-Mail : ", D.consignee.email, X0+2, y); y += 4.6;
+  font("bold",8.5); txt("Company Name/Address:", X0+2, y); y += 4.6;
+  font("normal",8.5);
+  D.consignee.lines.slice(0,7).forEach(ln=>{ if(y < yTable-1.5){ txt(ln, X0+2, y); y += 4.2; } });
+  labelVal("BUYER/IMPORTER : ", "Same as Consignee", MID+2, yCons+5);
+  // goods table
+  const cols = [X0, X0+20, X0+98, X0+122, X0+142, X0+160, X0+174, X1];
+  doc.line(X0, yTable, X1, yTable); doc.line(X0, yTableHead, X1, yTableHead);
+  for(let i=1;i<cols.length-1;i++) doc.line(cols[i], yTable, cols[i], yTableHead);
+  const hc = (t1,t2,i,sz=8)=>{ const cx=(cols[i]+cols[i+1])/2; font("bold",sz); if(t2){ txt(t1,cx,yTable+3.8,{align:"center"}); txt(t2,cx,yTable+7.6,{align:"center"}); } else txt(t1,cx,yTable+5.6,{align:"center"}); };
+  hc("No. of","Packages",0); hc("Description of Goods","",1); hc("Harmonized","Tariff Number",2,7); hc("Country","of Origin",3); hc("Quantity","(Set)",4); hc("Unit","Value",5); hc("Total","Value",6);
+  y = yTableHead + 9;
+  font("normal",8.5); txt("1", (cols[0]+cols[1])/2, y, {align:"center"});
+  font("bold",8.5);
+  const dl = doc.splitTextToSize(T(D.desc), cols[2]-cols[1]-4);
+  dl.forEach((ln,i)=>doc.text(ln, cols[1]+2, y + i*4.2));
+  font("normal",8); txt(D.hs, (cols[2]+cols[3])/2, y, {align:"center"}); txt(D.origin, (cols[3]+cols[4])/2, y, {align:"center"});
+  font("normal",8.5);
+  txt(String(D.qty), (cols[4]+cols[5])/2, y, {align:"center"});
+  txt(money(D.unitValue), cols[6]-2, y, {align:"right"});
+  txt(money(D.total), cols[7]-2, y, {align:"right"});
+  const yCur = y + Math.max(1,dl.length)*4.2 + 2;
+  lw(0.2); doc.line(X0+2, yCur, X1-2, yCur); lw(0.3);
+  font("bold",8.5); txt("Currency:", cols[5]+1, yCur+4.6); txt(D.currency, cols[7]-2, yCur+4.6, {align:"right"});
+  // special / signed
+  doc.line(X0, ySpecial, X1, ySpecial);
+  font("bold",8.5); txt("SPECIAL INSTRUCTIONS", X0+2, ySpecial+4.6);
+  font("normal",8.5); txt(D.special, X0+2, ySpecial+9.2);
+  doc.line(X0, ySigned, X1, ySigned);
+  font("bold",8.5); txt("SIGNED BY", X0+2, ySigned+4.6);
+  try{ doc.addImage(SIG_JPG, "JPEG", X0+8, ySigned+7, 44, 10.5); }catch(e){}
+
+  /* ---------- Order List ---------- */
+  const PER = 28;
+  const pages = Math.max(1, Math.ceil(D.list.length / PER));
+  let running = 0;
+  for(let p=0; p<pages; p++){
+    doc.addPage();
+    const items = D.list.slice(p*PER, (p+1)*PER);
+    font("bold",14); txt("Order List", 105, 16, {align:"center"});
+    font("bold",8.5); txt("Order No.:", X0+2, 24); font("normal",8.5);
+    doc.text(doc.splitTextToSize(T(D.orderNo), 120), X0+22, 24);
+    font("bold",8.5); txt("PAGE No.:", X0+2, 29); font("normal",8.5); txt(String(p+1), X0+22, 29);
+    font("bold",8.5); txt(`Currency:  ${D.currency}`, X1-2, 29, {align:"right"});
+    const c = [X0, X0+10, X0+90, X0+113, X0+139, X0+151, X0+168, X1];
+    const yH = 32, rh = 7.4;
+    lw(0.3); doc.rect(X0, yH, W, 9 + PER*rh + 2*rh);
+    doc.line(X0, yH+9, X1, yH+9);
+    for(let i=1;i<c.length-1;i++) doc.line(c[i], yH, c[i], yH+9+PER*rh);
+    const h2 = (t1,t2,i)=>{ const cx=(c[i]+c[i+1])/2; font("bold",8); if(t2){ txt(t1,cx,yH+3.8,{align:"center"}); txt(t2,cx,yH+7.4,{align:"center"}); } else txt(t1,cx,yH+5.6,{align:"center"}); };
+    h2("No.","",0); h2("Item Name","",1); h2("SKU","",2); h2("No-standard","PID",3); h2("Qty.","",4); h2("Unit Price","",5); h2("Amount","",6);
+    lw(0.1); doc.setDrawColor(190);
+    let sub = 0;
+    for(let r=0; r<PER; r++){
+      const yy = yH + 9 + r*rh;
+      if(r>0) doc.line(X0, yy, X1, yy);
+      const it = items[r];
+      if(!it) continue;
+      if(it.sep){ font("bold",8); doc.setTextColor(58,90,99); txt(it.text, c[1]+2, yy+4.8); doc.setTextColor(0); continue; }
+      font("normal",8);
+      txt(String(it.no), (c[0]+c[1])/2, yy+4.8, {align:"center"});
+      font("normal",7);
+      const nl = doc.splitTextToSize(T(it.name), c[2]-c[1]-3).slice(0,2);
+      if(nl.length===1) doc.text(nl[0], c[1]+1.5, yy+4.8);
+      else { doc.text(nl[0], c[1]+1.5, yy+3.2); doc.text(nl[1], c[1]+1.5, yy+6.3); }
+      font("normal",7.5);
+      txt(it.sku, (c[2]+c[3])/2, yy+4.8, {align:"center"});
+      txt(it.pid, (c[3]+c[4])/2, yy+4.8, {align:"center"});
+      font("normal",8);
+      txt(String(it.qty), (c[4]+c[5])/2, yy+4.8, {align:"center"});
+      txt(money(it.unit), c[6]-2, yy+4.8, {align:"right"});
+      txt(money(it.amount), c[7]-2, yy+4.8, {align:"right"});
+      sub = r2(sub + it.amount);
+    }
+    running = r2(running + sub);
+    doc.setDrawColor(0); lw(0.3);
+    const yS = yH + 9 + PER*rh;
+    doc.line(X0, yS, X1, yS); doc.line(X0, yS+rh, X1, yS+rh);
+    font("bold",8.5); txt("Sub Total", c[1]+2, yS+4.8); txt(money(sub), c[7]-2, yS+4.8, {align:"right"});
+    txt("Item Total", c[1]+2, yS+rh+4.8); txt(money(p===pages-1 ? D.total : running), c[7]-2, yS+rh+4.8, {align:"right"});
+  }
+  return doc;
+}
+async function withBusy(btn, fn){
+  const old = btn.innerHTML; btn.disabled = true; btn.innerHTML = "만드는 중...";
+  try{ return await fn(); }
+  catch(err){ console.error(err); alert("파일을 만드는 중 문제가 생겼어요: " + (err && err.message || err)); }
+  finally{ btn.disabled = false; btn.innerHTML = old; }
+}
+function openPdf(s, btn){
+  const win = window.open("", "_blank");
+  withBusy(btn, async ()=>{
+    const doc = await buildPdf(s);
+    const url = URL.createObjectURL(doc.output("blob"));
+    if(win) win.location.href = url; else window.open(url, "_blank");
+  });
+}
+function downloadPdf(s, btn){ withBusy(btn, async ()=>{ const doc = await buildPdf(s); saveBlob(doc.output("blob"), fileBase(s)+".pdf"); }); }
+function downloadInvXlsx(s, btn){ withBusy(btn, async ()=>{ saveBlob(await buildInvXlsx(s), fileBase(s)+".xlsx"); }); }
+function saveBlob(blob, name){
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+
+/* =====================================================================
+   인보이스 엑셀 (ExcelJS)
+   ===================================================================== */
+async function buildInvXlsx(s){
+  const D = invoiceData(s);
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Invoice", {
+    pageSetup:{paperSize:9, orientation:"portrait", fitToPage:true, fitToWidth:1, fitToHeight:0,
+      margins:{left:0.4,right:0.4,top:0.5,bottom:0.5,header:0.2,footer:0.2}},
+    views:[{showGridLines:false}]
+  });
+  // A=여백, B=No, C-F=설명, G=HS/SKU, H=원산지/PID, I=수량, J=단가, K=합계
+  const widths = {A:2,B:8,C:16,D:16,E:16,F:12,G:15,H:15,I:9,J:11,K:12};
+  Object.entries(widths).forEach(([k,v])=>ws.getColumn(k).width = v);
+  const base = {name:"Arial", size:9};
+  const thin = {style:"thin"}, med = {style:"medium"};
+  const set = (addr, v, opt={}) => {
+    const c = ws.getCell(addr); c.value = v;
+    c.font = Object.assign({}, base, opt.font||{});
+    if(opt.align) c.alignment = opt.align;
+    if(opt.fmt) c.numFmt = opt.fmt;
+    return c;
+  };
+  const box = (r1,c1,r2,c2, style=thin) => {
+    for(let r=r1;r<=r2;r++) for(let c=c1;c<=c2;c++){
+      const cell = ws.getCell(r,c); const b = Object.assign({}, cell.border||{});
+      if(r===r1) b.top = style; if(r===r2) b.bottom = style; if(c===c1) b.left = style; if(c===c2) b.right = style;
+      cell.border = b;
+    }
+  };
+  const B = {font:{bold:true}};
+
+  ws.mergeCells("B1:K1"); set("B1","COMMERCIAL INVOICE",{font:{bold:true,size:16},align:{horizontal:"center"}}); ws.getRow(1).height = 26;
+  // 발송인
+  let r = 2;
+  set(`B${r}`,"SHIPPER/EXPORTER",B); set(`G${r}`,"INVOICE/Order No.:",B); set(`I${r}`,D.orderNo,B); r++;
+  set(`B${r}`,`Tax ID#: ${D.taxId}`,B); set(`G${r}`,"DATE OF INVOICE:",B); set(`I${r}`,D.invDate); r++;
+  set(`B${r}`,`Contact Name: ${D.sender.contact}`,B); set(`G${r}`,"Ship Date:",B); set(`I${r}`,D.shipDate); r++;
+  set(`B${r}`,`TEL: ${D.senderPhone}`); r++;
+  set(`B${r}`,`E-Mail: ${D.sender.email}`); r++;
+  set(`B${r}`,"Company Name/Address:",B); r++;
+  const blk = String(D.sender.invoiceBlock||"").split("\n");
+  const rRight = 8;
+  set(`G${rRight}`,`PURPOSE OF SHIPMENT: ${D.purpose}`,B);
+  set(`G${rRight+1}`,`ORIGIN OF COUNTRY: ${D.origin}`,B);
+  set(`G${rRight+2}`,"REMARK:",B);
+  ws.mergeCells(`H${rRight+2}:K${rRight+4}`); set(`H${rRight+2}`, D.remark, {align:{wrapText:true, vertical:"top"}});
+  blk.forEach(ln=>{ set(`B${r}`, ln); r++; });
+  const shipEnd = Math.max(r, rRight+5) ;
+  box(2,2,shipEnd-1,6); box(2,7,7,11); box(8,7,shipEnd-1,11);
+  // 수취인
+  const c0 = shipEnd;
+  r = c0;
+  set(`B${r}`,"CONSIGNEE",B); set(`G${r}`,"BUYER/IMPORTER : Same as Consignee",B); r++;
+  set(`B${r}`,`Tax ID#: ${D.consignee.tin||""}`,B); r++;
+  set(`B${r}`,`Contact Name : ${D.consignee.name}`,B); r++;
+  set(`B${r}`,`TEL : ${D.consignee.phone}`,B); r++;
+  set(`B${r}`,`E-Mail : ${D.consignee.email||""}`,B); r++;
+  set(`B${r}`,"Company Name/Address:",B); r++;
+  D.consignee.lines.forEach(ln=>{ set(`B${r}`, ln); r++; });
+  const consEnd = r;
+  box(c0,2,consEnd-1,6); box(c0,7,consEnd-1,11);
+  // 상품 표
+  const h = consEnd;
+  const heads = [["B","No. of\nPackages"],["C","Description of Goods"],["G","Harmonized\nTariff Number"],["H","Country\nof Origin"],["I","Quantity\n(Set)"],["J","Unit\nValue"],["K","Total\nValue"]];
+  ws.mergeCells(`C${h}:F${h}`);
+  heads.forEach(([col,t])=>set(`${col}${h}`, t, {font:{bold:true,size:8.5}, align:{horizontal:"center",vertical:"middle",wrapText:true}}));
+  ws.getRow(h).height = 28;
+  ["B","C","G","H","I","J","K"].forEach((col,i)=>{ const cs={B:[2,2],C:[3,6],G:[7,7],H:[8,8],I:[9,9],J:[10,10],K:[11,11]}[col]; box(h,cs[0],h,cs[1]); });
+  const g = h+1;
+  ws.mergeCells(`C${g}:F${g}`);
+  set(`B${g}`,1,{align:{horizontal:"center",vertical:"top"}});
+  set(`C${g}`,D.desc,{font:{bold:true},align:{wrapText:true,vertical:"top"}});
+  set(`G${g}`,D.hs,{align:{horizontal:"center",vertical:"top"}});
+  set(`H${g}`,D.origin,{align:{horizontal:"center",vertical:"top"}});
+  set(`I${g}`,D.qty,{align:{horizontal:"center",vertical:"top"}});
+  set(`J${g}`,D.unitValue,{fmt:"#,##0.00",align:{vertical:"top"}});
+  set(`K${g}`,D.total,{fmt:"#,##0.00",align:{vertical:"top"}});
+  ws.getRow(g).height = 30;
+  set(`J${g+1}`,"Currency:",B); set(`K${g+1}`,D.currency,{font:{bold:true},align:{horizontal:"right"}});
+  const goodsEnd = g+8;
+  box(h+1,2,goodsEnd,11);
+  r = goodsEnd+1;
+  set(`B${r}`,"SPECIAL INSTRUCTIONS",B); set(`B${r+1}`,D.special);
+  box(r,2,r+3,11);
+  r += 4;
+  set(`B${r}`,"SIGNED BY",B);
+  box(r,2,r+4,11);
+  try{
+    const id = wb.addImage({base64: SIG_JPG, extension:"jpeg"});
+    ws.addImage(id, {tl:{col:2, row:r}, ext:{width:150, height:36}});
+  }catch(e){}
+  r += 5;
+  ws.getRow(r-1).addPageBreak();
+
+  // Order List
+  const PER = 28;
+  const pages = Math.max(1, Math.ceil(D.list.length/PER));
+  let running = 0;
+  for(let p=0;p<pages;p++){
+    r += 1;
+    ws.mergeCells(`B${r}:K${r}`); set(`B${r}`,"Order List",{font:{bold:true,size:14},align:{horizontal:"center"}}); ws.getRow(r).height = 22; r++;
+    set(`B${r}`,"Order No.:",B); ws.mergeCells(`C${r}:H${r}`); set(`C${r}`,D.orderNo); r++;
+    set(`B${r}`,"PAGE No.:",B); set(`C${r}`,p+1,{align:{horizontal:"left"}}); set(`J${r}`,`Currency:  ${D.currency}`,B); r++;
+    const hr = r;
+    ws.mergeCells(`C${hr}:F${hr}`);
+    [["B","No."],["C","Item Name"],["G","SKU"],["H","No-standard\nPID"],["I","Qty."],["J","Unit Price"],["K","Amount"]]
+      .forEach(([col,t])=>set(`${col}${hr}`,t,{font:{bold:true,size:8.5},align:{horizontal:"center",vertical:"middle",wrapText:true}}));
+    ws.getRow(hr).height = 26;
+    box(hr,2,hr,11,thin);
+    r++;
+    const items = D.list.slice(p*PER,(p+1)*PER);
+    let sub = 0;
+    for(let i=0;i<PER;i++){
+      const it = items[i];
+      ws.mergeCells(`C${r}:F${r}`);
+      ws.getRow(r).height = 24;
+      if(it){
+        if(it.sep){ set(`C${r}`, it.text, {font:{bold:true,color:{argb:"FF3A5A63"}}, align:{vertical:"middle"}}); }
+        else{
+          set(`B${r}`,it.no,{align:{horizontal:"center",vertical:"middle"}});
+          set(`C${r}`,it.name,{font:{size:8},align:{wrapText:true,vertical:"middle"}});
+          set(`G${r}`,it.sku,{font:{size:8},align:{horizontal:"center",vertical:"middle"}});
+          set(`H${r}`,it.pid,{font:{size:8},align:{horizontal:"center",vertical:"middle"}});
+          set(`I${r}`,it.qty,{align:{horizontal:"center",vertical:"middle"}});
+          set(`J${r}`,it.unit,{fmt:"#,##0.00",align:{vertical:"middle"}});
+          set(`K${r}`,it.amount,{fmt:"#,##0.00",align:{vertical:"middle"}});
+          sub = r2(sub + it.amount);
+        }
+      }
+      for(let c=2;c<=11;c++){ const cell = ws.getCell(r,c); cell.border = Object.assign({}, cell.border, {bottom:{style:"hair"}}); }
+      r++;
+    }
+    running = r2(running + sub);
+    ws.mergeCells(`C${r}:F${r}`); set(`C${r}`,"Sub Total",B); set(`K${r}`,sub,{font:{bold:true},fmt:"#,##0.00"}); r++;
+    ws.mergeCells(`C${r}:F${r}`); set(`C${r}`,"Item Total",B); set(`K${r}`,p===pages-1?D.total:running,{font:{bold:true},fmt:"#,##0.00"}); r++;
+    box(hr,2,r-1,11);
+    ws.getRow(r-1).addPageBreak();
+    r += 1;
+  }
+  ws.pageSetup.printArea = `A1:K${r}`;
+  const buf = await wb.xlsx.writeBuffer();
+  return new Blob([buf], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+}
+
+/* =====================================================================
+   페덱스 일괄발송 엑셀
+   ===================================================================== */
+const FEDEX_COLS = ["reference","invNumber","senderContactName","senderCompany","senderTin","senderContactNumber","senderEmail",
+  "senderLine1","senderLine2","senderLine3","senderPostcode","senderState","senderCity","senderCountry",
+  "recipientContactName","recipientCompany","recipientTin","recipientContactNumber","recipientEmail",
+  "recipientLine1","recipientLine2","recipientLine3","recipientPostcode","recipientState","recipientCity","recipientCountry",
+  "packageType","numberOfPackages","packageWeight","weightUnits","length","width","height","currencyType",
+  "commodityType","itemDescription","harmonizedCode","manufacturingCountry","commodityQuantity","commodityMeasureUnit",
+  "commodityWeight","customsValue","purposeOfShipment","generateInvoice","etdEnabled","shipDate","serviceType"];
+function fedexRow(s){
+  const st = S.settings, c = calc(s), snd = st.sender;
+  const ref = s.ids.length>1 ? `${s.ids[0]} +${s.ids.length-1}` : s.ids[0];
+  const ymd = (s.shipDate||todayISO()).replace(/-/g,"");
+  return {
+    reference: ref, invNumber: s.ids[0],
+    senderContactName: snd.contact, senderCompany: snd.company, senderTin: s.taxId,
+    senderContactNumber: fmtPhoneForFedex(snd.phone), senderEmail: snd.email,
+    senderLine1: snd.line1, senderLine2: snd.line2, senderLine3: snd.line3,
+    senderPostcode: snd.postcode, senderState: "", senderCity: snd.city, senderCountry: snd.country,
+    recipientContactName: s.name, recipientCompany: s.company, recipientTin: s.tin,
+    recipientContactNumber: fmtPhoneForFedex(s.phone), recipientEmail: s.email,
+    recipientLine1: s.line1, recipientLine2: s.line2, recipientLine3: s.line3,
+    recipientPostcode: s.zip, recipientState: fedexState(s.code, s.state), recipientCity: s.city, recipientCountry: s.code,
+    packageType: "YOUR_PACKAGING", numberOfPackages: 1, packageWeight: num(s.kg), weightUnits: "KGS",
+    length: num(s.l)||"", width: num(s.w)||"", height: num(s.h)||"", currencyType: st.currency,
+    commodityType: "ITEMS", itemDescription: s.desc, harmonizedCode: s.hs, manufacturingCountry: "KR",
+    commodityQuantity: c.qty, commodityMeasureUnit: st.unit, commodityWeight: num(s.kg),
+    customsValue: c.total, purposeOfShipment: st.purposeCode, generateInvoice: "OWN", etdEnabled: "Y",
+    shipDate: ymd, serviceType: s.service
+  };
+}
+async function buildFedexXlsx(){
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Shipments");
+  ws.addRow(FEDEX_COLS);
+  S.ships.forEach(s=>{
+    const row = fedexRow(s);
+    const r = ws.addRow(FEDEX_COLS.map(k=>row[k]===undefined?"":row[k]));
+    // 전화번호·우편번호·주문번호는 텍스트로
+    ["senderContactNumber","recipientContactNumber","recipientPostcode","senderPostcode","reference","invNumber","shipDate"].forEach(k=>{
+      const c = r.getCell(FEDEX_COLS.indexOf(k)+1); c.value = String(row[k]??""); c.numFmt = "@";
+    });
+  });
+  ws.getRow(1).font = {bold:true};
+  FEDEX_COLS.forEach((k,i)=>ws.getColumn(i+1).width = Math.max(12, Math.min(40, k.length+2)));
+  const buf = await wb.xlsx.writeBuffer();
+  return new Blob([buf], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+}
+
+/* =====================================================================
+   4. 내려받기
+   ===================================================================== */
+function checkAll(){
+  const errs = S.ships.map((s,i)=>({i, e:issues(s).e})).filter(x=>x.e.length);
+  if(!errs.length) return true;
+  const msg = errs.slice(0,6).map(x=>`${x.i+1}번 (${S.ships[x.i].name}): ${x.e.join(", ")}`).join("\n");
+  return confirm(`아직 확인이 필요한 건이 있어요.\n\n${msg}${errs.length>6?"\n...":""}\n\n그래도 파일을 만들까요?`);
+}
+function stamp(){ return todayISO().replace(/-/g,""); }
+async function invoiceZip(zip){
+  const used = {};
+  for(const s of S.ships){
+    let b = fileBase(s); used[b] = (used[b]||0)+1; if(used[b]>1) b += "_" + used[b];
+    zip.file(b+".xlsx", await buildInvXlsx(s));
+    zip.file(b+".pdf", (await buildPdf(s)).output("blob"));
+  }
+}
+$("btnFedex").onclick = e=>{ if(!S.ships.length || !checkAll()) return; withBusy(e.currentTarget, async ()=>{
+  saveBlob(await buildFedexXlsx(), `fedex_batch_${stamp()}.xlsx`);
+  setStatus($("status4"),"ok",`페덱스 업로드 엑셀을 만들었어요 (${S.ships.length}건).`);
+});};
+$("btnInvZip").onclick = e=>{ if(!S.ships.length || !checkAll()) return; withBusy(e.currentTarget, async ()=>{
+  setStatus($("status4"),"busy","인보이스를 만드는 중...");
+  const zip = new JSZip(); await invoiceZip(zip);
+  saveBlob(await zip.generateAsync({type:"blob"}), `invoices_${stamp()}.zip`);
+  setStatus($("status4"),"ok",`인보이스 ${S.ships.length}건(엑셀+PDF)을 ZIP으로 만들었어요.` + fontNote());
+});};
+$("btnAll").onclick = e=>{ if(!S.ships.length || !checkAll()) return; withBusy(e.currentTarget, async ()=>{
+  setStatus($("status4"),"busy","파일을 만드는 중...");
+  const zip = new JSZip();
+  zip.file(`fedex_batch_${stamp()}.xlsx`, await buildFedexXlsx());
+  await invoiceZip(zip.folder("invoices"));
+  saveBlob(await zip.generateAsync({type:"blob"}), `fedex_${stamp()}.zip`);
+  setStatus($("status4"),"ok",`페덱스 엑셀 1개와 인보이스 ${S.ships.length}건을 한 ZIP으로 만들었어요.` + fontNote());
+});};
+function fontNote(){ return FONT_STATE && !FONT_STATE.ok ? "<br>⚠️ PDF 글꼴을 불러오지 못해 기본 글꼴로 만들었어요. 악센트(é, ç 등)가 빠져 보일 수 있어요." : ""; }
+
+/* =====================================================================
+   설정 화면
+   ===================================================================== */
+function renderSettings(){
+  const st = S.settings, sd = st.sender;
+  const inp = (path, label, val, cls="") => `<div class="f ${cls}"><label>${label}</label><input data-set="${path}" value="${esc(val)}"></div>`;
+  $("settingsArea").innerHTML = `
+    <div class="sec-title">보내는 사람 (페덱스 업로드용)</div>
+    <div class="grid g3">
+      ${inp("sender.contact","담당자 이름",sd.contact)}
+      ${inp("sender.company","회사명",sd.company)}
+      ${inp("sender.phone","전화번호",sd.phone)}
+      ${inp("sender.email","이메일",sd.email)}
+      ${inp("sender.line1","주소 1",sd.line1)}
+      ${inp("sender.line2","주소 2",sd.line2)}
+      ${inp("sender.line3","주소 3",sd.line3)}
+      ${inp("sender.city","도시",sd.city)}
+      ${inp("sender.postcode","우편번호",sd.postcode)}
+    </div>
+    <div class="divider"></div>
+    <div class="sec-title">인보이스 표시</div>
+    <div class="grid g3">
+      ${inp("invoicePhone","인보이스 TEL",st.invoicePhone)}
+      ${inp("purposeText","PURPOSE OF SHIPMENT",st.purposeText)}
+      <div class="f"><label>페덱스 발송 목적</label><select data-set="purposeCode">${["GIFT","SOLD","NOT_SOLD","SAMPLE","REPAIR_AND_RETURN","PERSONAL_EFFECTS"].map(v=>`<option ${st.purposeCode===v?"selected":""}>${v}</option>`).join("")}</select></div>
+      ${inp("origin","ORIGIN OF COUNTRY",st.origin)}
+      ${inp("hs","기본 HS 코드",st.hs)}
+      ${inp("pidPrefix","No-standard PID 앞글자",st.pidPrefix)}
+      ${inp("description","기본 품명",st.description,"span3")}
+      ${inp("special","SPECIAL INSTRUCTIONS",st.special,"span3")}
+      <div class="f span3"><label>회사 주소 블록 (인보이스에 줄 그대로 표시)</label><textarea data-set="sender.invoiceBlock" rows="5">${esc(sd.invoiceBlock)}</textarea></div>
+      <div class="f"><label>기본 배송 서비스</label><select data-set="service">${SERVICES.map(([v,t])=>`<option value="${v}" ${st.service===v?"selected":""}>${t}</option>`).join("")}</select></div>
+    </div>
+    <div class="divider"></div>
+    <div class="sec-title">국가별 IOSS / EORI / 세금번호</div>
+    <table class="rules"><tbody>
+      ${st.taxRules.map((r,i)=>`<tr>
+        <td style="width:22%"><input data-rule="${i}" data-rk="label" value="${esc(r.label)}" placeholder="이름"></td>
+        <td><input data-rule="${i}" data-rk="countries" value="${esc(r.countries)}" placeholder="국가 코드 (쉼표로 구분, 예: GB)"></td>
+        <td style="width:22%"><input data-rule="${i}" data-rk="value" value="${esc(r.value)}" placeholder="번호"></td>
+        <td style="width:40px"><button class="mini ghost" data-delrule="${i}">삭제</button></td></tr>`).join("")}
+    </tbody></table>
+    <button class="mini" id="btnAddRule" style="margin-top:6px;">+ 규칙 추가</button>
+    <p class="hint">받는 나라의 코드가 목록에 있으면 그 번호가 자동으로 들어가요. 미리보기에서 건별로 바꿀 수 있어요.</p>
+    <div class="divider"></div>
+    <div class="sec-title">박스 목록 (첫 번째가 기본값)</div>
+    <table class="rules"><tbody>
+      ${st.boxes.map((b,i)=>`<tr>
+        <td style="width:20%"><input data-box="${i}" data-bk="name" value="${esc(b.name)}"></td>
+        ${["l","w","h","kg"].map(k=>`<td><input data-box="${i}" data-bk="${k}" type="number" step="0.01" value="${b[k]}" title="${{l:"가로",w:"세로",h:"높이",kg:"무게"}[k]}"></td>`).join("")}
+        <td style="width:40px"><button class="mini ghost" data-delbox="${i}">삭제</button></td></tr>`).join("")}
+    </tbody></table>
+    <p class="hint">순서: 이름 · 가로(cm) · 세로(cm) · 높이(cm) · 무게(kg)</p>
+    <button class="mini" id="btnAddBox" style="margin-top:6px;">+ 박스 추가</button>
+    <div class="divider"></div>
+    <button class="mini ghost" id="btnResetSettings">기본값으로 되돌리기</button>
+  `;
+  const area = $("settingsArea");
+  area.querySelectorAll("[data-set]").forEach(el=>{
+    el.addEventListener(el.tagName==="SELECT"?"change":"input", ()=>{
+      const path = el.dataset.set.split(".");
+      let o = S.settings; for(let i=0;i<path.length-1;i++) o = o[path[i]];
+      o[path[path.length-1]] = el.value; saveSettings();
+    });
+  });
+  area.querySelectorAll("[data-rule]").forEach(el=>el.addEventListener("input",()=>{ S.settings.taxRules[+el.dataset.rule][el.dataset.rk] = el.value; saveSettings(); }));
+  area.querySelectorAll("[data-box]").forEach(el=>el.addEventListener("input",()=>{
+    const b = S.settings.boxes[+el.dataset.box]; b[el.dataset.bk] = el.dataset.bk==="name" ? el.value : num(el.value); saveSettings();
+  }));
+  area.querySelectorAll("[data-delrule]").forEach(el=>el.onclick=()=>{ S.settings.taxRules.splice(+el.dataset.delrule,1); saveSettings(); renderSettings(); });
+  area.querySelectorAll("[data-delbox]").forEach(el=>el.onclick=()=>{ if(S.settings.boxes.length<=1) return; S.settings.boxes.splice(+el.dataset.delbox,1); saveSettings(); renderSettings(); });
+  $("btnAddRule").onclick = ()=>{ S.settings.taxRules.push({label:"",countries:"",value:""}); saveSettings(); renderSettings(); };
+  $("btnAddBox").onclick = ()=>{ S.settings.boxes.push({name:"새 박스",l:0,w:0,h:0,kg:0}); saveSettings(); renderSettings(); };
+  $("btnResetSettings").onclick = ()=>{ if(!confirm("설정을 처음 값으로 되돌릴까요?")) return; S.settings = structuredClone(DEFAULT_SETTINGS); saveSettings(); renderSettings(); };
+}
+renderSettings();
+/* 설정이 바뀌면 열려 있는 미리보기 박스 목록도 갱신 */
+$("settingsBox").addEventListener("toggle", ()=>{ if(!$("settingsBox").open && S.ships.length) renderShips(); });
+</script>
+</body>
+</html>
