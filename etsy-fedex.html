@@ -359,35 +359,41 @@ const SERVICES = [
 ];
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
+const SETTINGS_KEY = "etsyFedexSettings.v2";
+const DUTY_OPTS = [["SENDER","내 고객번호 (발송인 부담)"],["RECIPIENT","수취인"]];
+const CPSC_DISCLAIM = [["A","A: 이 제품은 CPSC 규제 대상이 아닙니다"],["B","B: 기관 지침상 데이터가 필요하지 않습니다"]];
+const CPSC_IDTYPES = ["SKU","PART_NUMBER","REGISTERED_NUMBER","GTIN","UPC","EAN","MPN","OTHER"];
 const DEFAULT_SETTINGS = {
   sender: {
     contact: "JI-HOON CHUNG",
-    company: "BEADSMAKER",
-    phone: "+82 31 915 5123",
+    company: "NBEADS",
+    phone: "0319155123",
     email: "slosien@naver.com",
     line1: "METROPOLICE BLDG ROOM 1002",
-    line2: "77, Jungang-ro 1261 beon-gil",
-    line3: "ILSANDONG-GU",
-    city: "GOYANG-SI",
-    postcode: "10401",
+    line2: "77, Jungang-ro 1261st",
+    line3: "",
+    city: "Goyang-si, Ilsandong-gu",
+    postcode: "10402",
     country: "KR",
-    invoiceBlock: "BEADSMAKER\nMETROPOLICE BLDG ROOM 1002\n77, Jungang-ro 1261 beon-gil\nGOYANG-SI ILSANDONG-GU 10401\nSouth Korea"
+    invoiceBlock: "BEADSMAKER\nMETROPOLICE BLDG ROOM 1002\n77, Jungang-ro 1261 beon-gil\nGOYANG-SI ILSANDONG-GU 10402\nSouth Korea"
   },
   invoicePhone: "+82-31-915-5123",
   purposeText: "Gift",
   purposeCode: "GIFT",
   origin: "South Korea",
-  description: "Craft Supplies (Pendants, Charms, Earrings and Necklace Findings, Etc)",
+  description: "Parts of imitation jewelry (Pendants, Charms, Earrings and Necklace Findings, Etc.) for adult accessories - not a finished product, not for children",
   hs: "7117.19.90.00",
   unit: "SET",
   currency: "USD",
   service: "FEDEX_INTERNATIONAL_CONNECT_PLUS",
+  dutyDefault: "RECIPIENT",
   pidPrefix: "BM",
   special: "Order list or packing list is attached",
-  taxRules: [
-    {label:"유럽 (EU) · IOSS", countries:EU.join(","), value:"IM3720000224"},
-    {label:"영국", countries:"GB", value:"370 6004 28"},
-    {label:"싱가포르", countries:"SG", value:"SGM90373362R"}
+  rules: [
+    {label:"유럽 (EU)", countries:EU.join(","), taxId:"IM3720000224", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", memo:""},
+    {label:"영국", countries:"GB", taxId:"370 6004 28", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", memo:""},
+    {label:"싱가포르", countries:"SG", taxId:"SGM90373362R", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", memo:""},
+    {label:"미국", countries:"US", taxId:"", duty:"SENDER", extraLabel:"", extraRequired:false, cpscOn:true, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", memo:""}
   ],
   boxes: [
     {name:"소", l:23, w:16, h:7, kg:0.49},
@@ -412,20 +418,25 @@ const S = {
 };
 let uid = 0;
 
+function normalizeSettings(s){
+  const d = structuredClone(DEFAULT_SETTINGS);
+  if(!s || typeof s!=="object") return d;
+  const out = Object.assign(d, s, { sender: Object.assign(d.sender, s.sender||{}) });
+  if(!Array.isArray(out.rules)) out.rules = structuredClone(DEFAULT_SETTINGS.rules);
+  const blank = DEFAULT_SETTINGS.rules[0];
+  out.rules = out.rules.map(r=>Object.assign({}, blank, {label:"",countries:"",taxId:"",duty:"",extraLabel:"",extraRequired:false,cpscOn:false,memo:""}, r));
+  if(!Array.isArray(out.boxes) || !out.boxes.length) out.boxes = structuredClone(DEFAULT_SETTINGS.boxes);
+  return out;
+}
 function loadSettings(){
   try{
-    const raw = localStorage.getItem("etsyFedexSettings");
-    if(raw){
-      const s = JSON.parse(raw);
-      return Object.assign(structuredClone(DEFAULT_SETTINGS), s, {
-        sender: Object.assign(structuredClone(DEFAULT_SETTINGS.sender), s.sender||{})
-      });
-    }
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if(raw) return normalizeSettings(JSON.parse(raw));
   }catch(e){}
   return structuredClone(DEFAULT_SETTINGS);
 }
 function saveSettings(){
-  try{ localStorage.setItem("etsyFedexSettings", JSON.stringify(S.settings)); }catch(e){}
+  try{ localStorage.setItem(SETTINGS_KEY, JSON.stringify(S.settings)); }catch(e){}
 }
 
 /* =====================================================================
@@ -800,13 +811,32 @@ function updateSelInfo(){
 /* =====================================================================
    3. 미리보기 데이터
    ===================================================================== */
-function taxIdFor(code){
-  for(const r of S.settings.taxRules){
-    const cs = String(r.countries||"").toUpperCase().split(/[\s,]+/).filter(Boolean);
-    if(cs.includes(code)) return r.value;
+/* 국가별 규칙: 해당 국가가 들어 있는 규칙을 위에서부터 합침 (먼저 나온 값 우선) */
+function ruleFor(code){
+  const st = S.settings;
+  const r = {taxId:"", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", memos:[], names:[]};
+  let cpscSet = false;
+  for(const x of st.rules){
+    const cs = String(x.countries||"").toUpperCase().split(/[\s,]+/).filter(Boolean);
+    if(!code || !cs.includes(code)) continue;
+    r.names.push(x.label || cs.join(","));
+    if(!r.taxId && x.taxId) r.taxId = x.taxId;
+    if(!r.duty && x.duty) r.duty = x.duty;
+    if(!r.extraLabel && x.extraLabel){ r.extraLabel = x.extraLabel; r.extraRequired = !!x.extraRequired; }
+    if(!cpscSet && x.cpscOn){ cpscSet = true; r.cpscOn = true; r.cpscDisclaim = x.cpscDisclaim||"A"; r.cpscUse = x.cpscUse||""; r.cpscIdType = x.cpscIdType||"SKU"; }
+    if(x.memo) r.memos.push(x.memo);
   }
-  return "";
+  if(!r.duty) r.duty = st.dutyDefault || "RECIPIENT";
+  return r;
 }
+function taxIdFor(code){ return ruleFor(code).taxId; }
+function applyRule(s){
+  const r = ruleFor(s.code);
+  s.taxId = r.taxId; s.duty = r.duty; s.extraLabel = r.extraLabel; s.extraRequired = r.extraRequired;
+  s.cpscOn = r.cpscOn; s.cpscDisclaim = r.cpscDisclaim; s.cpscUse = r.cpscUse; s.cpscIdType = r.cpscIdType;
+  s.memos = r.memos; s.ruleNames = r.names;
+}
+function firstSku(s){ const l = s.lines.find(x=>x.sku); return l ? l.sku : ""; }
 function couponLabel(o){
   if(!o.discount) return "";
   const pct = o.subtotal ? Math.round(o.discount/o.subtotal*100) : 0;
@@ -829,15 +859,15 @@ function makeShip(ids){
     }
     if(od.discount>0) coupons.push({oid:od.id, label:couponLabel(od), rate: od.subtotal? od.discount/od.subtotal : 0, fixed:false, origAmt: od.discount});
   }
-  return {
+  const s = {
     uid: ++uid, ids, open: true,
-    name: o.name, company:"", phone, email:"", tin:"",
+    name: o.name, company:"", phone, email:"", tin:"", payerAcct:"",
     line1: lines[0]||"", line2: lines[1]||"", line3: lines.slice(2).join(" "),
     city: o.city, state: o.state, zip: o.zip,
     code: o.code, countryName: o.country,
     boxIdx: 0, l: box.l, w: box.w, h: box.h, kg: box.kg,
     service: S.settings.service,
-    taxId: taxIdFor(o.code),
+    cpscPid: null,
     hs: S.settings.hs, desc: S.settings.description,
     invDate: os.map(x=>x.saleDate).sort().slice(-1)[0],
     shipDate: todayISO(),
@@ -845,7 +875,10 @@ function makeShip(ids){
     lines: lns, coupons,
     origTotal: r2(os.reduce((a,x)=>a + x.subtotal - x.discount, 0))
   };
+  applyRule(s);
+  return s;
 }
+function cpscPid(s){ return s.cpscPid!=null ? s.cpscPid : firstSku(s); }
 function buildShips(){
   const groups = groupsFromSelection();
   const keep = new Map(S.ships.map(s=>[s.ids.join(","), s]));
@@ -890,6 +923,9 @@ function issues(s){
   else if(!s.zip) w.push("우편번호 없음");
   if(STATE_COUNTRY[s.code] && !fedexState(s.code, s.state)) e.push("주(State) 코드");
   if(!(num(s.kg)>0)) e.push("무게");
+  if(s.extraRequired && !clean(s.tin)) e.push(`${s.extraLabel||"수취인 추가 정보"} 없음`);
+  if(clean(s.tin).length>18) e.push("수취인 Tax ID 18자 초과");
+  if(s.cpscOn && !s.cpscDisclaim) e.push("CPSC 이유");
   if(!s.hs) w.push("HS코드 없음");
   if(!s.taxId && (EU.includes(s.code) || s.code==="GB")) w.push("세금번호 비어 있음");
   return {e, w};
@@ -901,7 +937,7 @@ function issues(s){
 function fld(s, key, label, opt={}){
   const v = s[key] ?? "";
   const max = opt.max;
-  const cnt = max ? `<span class="cnt ${String(v).length>max?"over":""}" data-cnt="${key}">${String(v).length}/${max}</span>` : "";
+  const cnt = max ? `<span class="cnt ${String(v).length>max?"over":""}" data-cnt="${key}" data-max="${max}">${String(v).length}/${max}</span>` : "";
   return `<div class="f ${opt.cls||""}" data-f="${key}"><label>${label}${cnt}</label>
     <input data-k="${key}" value="${esc(v)}" ${opt.type?`type="${opt.type}"`:""} ${opt.ph?`placeholder="${esc(opt.ph)}"`:""} ${opt.step?`step="${opt.step}"`:""}></div>`;
 }
@@ -921,7 +957,7 @@ function shipHTML(s, i){
   let rowsHTML = "";
   s.lines.forEach((l,j)=>{
     if(multi && l.oid!==lastOid){
-      rowsHTML += `<tr class="ordsep"><td colspan="9">주문 #${l.oid}</td></tr>`; lastOid = l.oid;
+      rowsHTML += `<tr class="ordsep"><td colspan="9">ORDER ${s.ids.indexOf(l.oid)+1} <span style="font-weight:500;color:var(--muted)">· #${l.oid}</span></td></tr>`; lastOid = l.oid;
     }
     rowsHTML += `<tr data-line="${j}">
       <td class="r">${j+1}</td>
@@ -949,6 +985,7 @@ function shipHTML(s, i){
       <div class="ship-badges" data-badges></div>
     </div>
     <div class="ship-body">
+      <div data-memo></div>
       <div class="sec-title">받는 사람</div>
       <div class="grid g4">
         ${fld(s,"name","이름",{max:35,cls:"span2"})}
@@ -958,7 +995,7 @@ function shipHTML(s, i){
         ${fld(s,"line2","주소 2",{max:35,cls:"span2"})}
         ${fld(s,"line3","주소 3",{max:35,cls:"span2"})}
         ${fld(s,"company","회사명 (선택)")}
-        ${fld(s,"tin","수취인 Tax ID (선택)")}
+        ${fld(s,"tin", s.extraLabel ? `${s.extraLabel}${s.extraRequired?" (필수)":" (선택)"}` : "수취인 Tax ID / 통관번호 (선택)", {max:18})}
         ${fld(s,"city","도시")}
         ${fld(s,"state","주 / 지역",{ph: STATE_COUNTRY[s.code]?"예: CA, NY":""})}
         ${fld(s,"zip","우편번호")}
@@ -978,6 +1015,19 @@ function shipHTML(s, i){
         ${fld(s,"desc","품명 (Description of Goods)",{cls:"span3"})}
         ${fld(s,"invDate","인보이스 날짜 (주문일)",{type:"date"})}
         ${fld(s,"shipDate","Ship Date (발송일)",{type:"date"})}
+      </div>
+      <div class="divider"></div>
+      <div class="sec-title">청구 · CPSC</div>
+      <div class="grid g4">
+        <div class="f"><label>운송비 청구 대상</label><input value="내 고객번호" disabled style="background:#f7f6f2;color:var(--muted)"></div>
+        <div class="f"><label>관세·세금·수수료 청구 대상</label><select data-k="duty">${DUTY_OPTS.map(([v,t])=>`<option value="${v}" ${s.duty===v?"selected":""}>${t}</option>`).join("")}</select></div>
+        <div class="f span2" data-f="payerAcct" style="${s.duty==="RECIPIENT"?"":"display:none"}"><label>수취인 FedEx 고객번호 (있을 때만)</label><input data-k="payerAcct" value="${esc(s.payerAcct)}" placeholder="없으면 비워 두세요"></div>
+      </div>
+      <div class="grid g4" style="margin-top:10px;">
+        <div class="f"><label>CPSC 정보 넣기</label><select data-k="cpscOn"><option value="1" ${s.cpscOn?"selected":""}>넣음 (규제 준수 정보: 아니오)</option><option value="" ${s.cpscOn?"":"selected"}>넣지 않음</option></select></div>
+        <div class="f cpscf"><label>이유 선택</label><select data-k="cpscDisclaim">${CPSC_DISCLAIM.map(([v,t])=>`<option value="${v}" ${s.cpscDisclaim===v?"selected":""}>${t}</option>`).join("")}</select></div>
+        ${fld(s,"cpscUse","추가 컨텍스트 코드",{cls:"cpscf",ph:"130.006 = 13세 이상"})}
+        <div class="f cpscf"><label>제품 ID 유형 · 제품 식별자</label><div style="display:flex;gap:6px;"><select data-k="cpscIdType" style="width:44%">${CPSC_IDTYPES.map(v=>`<option ${s.cpscIdType===v?"selected":""}>${v}</option>`).join("")}</select><input data-k="cpscPid" value="${esc(cpscPid(s))}" placeholder="첫 상품 SKU"></div></div>
       </div>
       <div class="divider"></div>
       <div class="sec-title">상품 · 신고 금액</div>
@@ -1046,6 +1096,18 @@ function refreshShip(s){
   });
   const tf = card.querySelector('.f[data-f="taxId"]');
   if(tf) tf.classList.toggle("warnf", w.some(x=>/세금/.test(x)));
+  const ef = card.querySelector('.f[data-f="tin"]');
+  if(ef) ef.classList.toggle("bad", e.some(x=>/추가 정보|Tax ID|통관/.test(x)) || (s.extraRequired && !clean(s.tin)));
+  card.querySelectorAll(".cpscf").forEach(x=>x.style.opacity = s.cpscOn ? "1" : ".35");
+  const pa = card.querySelector('.f[data-f="payerAcct"]'); if(pa) pa.style.display = s.duty==="RECIPIENT" ? "" : "none";
+  const pidIn = card.querySelector('[data-k="cpscPid"]');
+  if(pidIn && document.activeElement!==pidIn) pidIn.value = cpscPid(s);
+  const memo = card.querySelector("[data-memo]");
+  if(memo){
+    const rn = (s.ruleNames||[]).length ? `<b>적용 규칙:</b> ${esc(s.ruleNames.join(", "))}` : "";
+    const ms = (s.memos||[]).map(m=>`<div>📌 ${esc(m)}</div>`).join("");
+    memo.innerHTML = (rn||ms) ? `<div class="status show warn" style="margin:0 0 14px;">${rn}${ms}</div>` : "";
+  }
 }
 
 const shipsEl = $("ships");
@@ -1081,11 +1143,16 @@ shipsEl.addEventListener("input", e=>{
   if(t.dataset.k){
     const k = t.dataset.k;
     if(k==="boxIdx") return;
+    if(k==="cpscOn"){ s.cpscOn = !!t.value; refreshShip(s); return; }
+    if(k==="cpscPid"){ s.cpscPid = t.value; return; }
     s[k] = t.value;
-    if(k==="code"){ s.countryName = CODE_TO_NAME[t.value]||t.value; s.taxId = taxIdFor(t.value); const ti = t.closest(".ship").querySelector('[data-k="taxId"]'); if(ti) ti.value = s.taxId; }
+    if(k==="code"){
+      s.countryName = CODE_TO_NAME[t.value]||t.value; applyRule(s);
+      renderShips(); return;
+    }
     if(["l","w","h","kg"].includes(k)){ s.boxIdx = -1; t.closest(".ship").querySelector('[data-k="boxIdx"]').value = "-1"; }
     const cnt = t.closest(".ship").querySelector(`[data-cnt="${k}"]`);
-    if(cnt){ cnt.textContent = `${t.value.length}/35`; cnt.classList.toggle("over", t.value.length>35); }
+    if(cnt){ const mx = +cnt.dataset.max || 35; cnt.textContent = `${t.value.length}/${mx}`; cnt.classList.toggle("over", t.value.length>mx); }
     if(k==="name") t.closest(".ship").querySelector(".ship-title").firstChild.textContent = t.value + " ";
     refreshShip(s);
   } else if(t.dataset.lk){
@@ -1126,7 +1193,7 @@ function invoiceData(s){
   const list = [];
   let lastOid = null;
   s.lines.forEach((l,j)=>{
-    if(s.ids.length>1 && l.oid!==lastOid){ list.push({sep:true, text:`Order #${l.oid}`}); lastOid = l.oid; }
+    if(s.ids.length>1 && l.oid!==lastOid){ list.push({sep:true, text:`ORDER ${s.ids.indexOf(l.oid)+1}`}); lastOid = l.oid; }
     list.push({name:l.name, sku:l.sku, pid:l.pid, qty:l.qty, unit:c.rows[j].unit, amount:c.rows[j].amount});
     const ci = s.coupons.findIndex(cp=>cp.oid===l.oid);
     const nextOid = s.lines[j+1] ? s.lines[j+1].oid : null;
@@ -1189,7 +1256,7 @@ async function buildPdf(s){
   /* ---------- 1페이지: COMMERCIAL INVOICE ---------- */
   font("bold",16); txt("COMMERCIAL INVOICE", 105, 16, {align:"center"});
   lw(0.3);
-  const yTop = 20, yCons = 74, yTable = 134, yTableHead = 143, ySpecial = 220, ySigned = 242, yEnd = 268;
+  const yTop = 20, yCons = 88, yTable = 150, yTableHead = 159, ySpecial = 228, ySigned = 248, yEnd = 274;
   doc.rect(X0, yTop, W, yEnd-yTop);
   doc.line(MID, yTop, MID, yTable);
   doc.line(X0, yCons, X1, yCons);
@@ -1214,7 +1281,7 @@ async function buildPdf(s){
   labelVal("PURPOSE OF SHIPMENT: ", D.purpose, MID+2, y); y += 4.6;
   labelVal("ORIGIN OF COUNTRY: ", D.origin, MID+2, y); y += 4.6;
   font("bold",8.5); txt("REMARK:", MID+2, y); font("normal",8.5);
-  doc.splitTextToSize(T(D.remark), X1-(MID+18)-2).slice(0,4).forEach((ln,i)=>doc.text(ln, MID+18, y + i*4.2));
+  doc.splitTextToSize(T(D.remark), X1-(MID+18)-2).slice(0,6).forEach((ln,i)=>doc.text(ln, MID+18, y + i*4.2));
   // consignee
   y = yCons + 5;
   font("bold",8.5); txt("CONSIGNEE", X0+2, y); y += 4.6;
@@ -1371,15 +1438,16 @@ async function buildInvXlsx(s){
   set(`G${rRight}`,`PURPOSE OF SHIPMENT: ${D.purpose}`,B);
   set(`G${rRight+1}`,`ORIGIN OF COUNTRY: ${D.origin}`,B);
   set(`G${rRight+2}`,"REMARK:",B);
-  ws.mergeCells(`H${rRight+2}:K${rRight+4}`); set(`H${rRight+2}`, D.remark, {align:{wrapText:true, vertical:"top"}});
+  ws.mergeCells(`H${rRight+2}:K${rRight+6}`); set(`H${rRight+2}`, D.remark, {align:{wrapText:true, vertical:"top"}});
   blk.forEach(ln=>{ set(`B${r}`, ln); r++; });
-  const shipEnd = Math.max(r, rRight+5) ;
+  const shipEnd = Math.max(r, rRight+7) ;
   box(2,2,shipEnd-1,6); box(2,7,7,11); box(8,7,shipEnd-1,11);
   // 수취인
   const c0 = shipEnd;
   r = c0;
   set(`B${r}`,"CONSIGNEE",B); set(`G${r}`,"BUYER/IMPORTER : Same as Consignee",B); r++;
   set(`B${r}`,`Tax ID#: ${D.consignee.tin||""}`,B); r++;
+  /* (Tax ID# 줄 = 수취인 추가 정보: 개인통관번호 등) */
   set(`B${r}`,`Contact Name : ${D.consignee.name}`,B); r++;
   set(`B${r}`,`TEL : ${D.consignee.phone}`,B); r++;
   set(`B${r}`,`E-Mail : ${D.consignee.email||""}`,B); r++;
@@ -1403,7 +1471,7 @@ async function buildInvXlsx(s){
   set(`I${g}`,D.qty,{align:{horizontal:"center",vertical:"top"}});
   set(`J${g}`,D.unitValue,{fmt:"#,##0.00",align:{vertical:"top"}});
   set(`K${g}`,D.total,{fmt:"#,##0.00",align:{vertical:"top"}});
-  ws.getRow(g).height = 30;
+  ws.getRow(g).height = 48;
   set(`J${g+1}`,"Currency:",B); set(`K${g+1}`,D.currency,{font:{bold:true},align:{horizontal:"right"}});
   const goodsEnd = g+8;
   box(h+1,2,goodsEnd,11);
@@ -1473,24 +1541,32 @@ async function buildInvXlsx(s){
 /* =====================================================================
    페덱스 일괄발송 엑셀
    ===================================================================== */
-const FEDEX_COLS = ["reference","invNumber","senderContactName","senderCompany","senderTin","senderContactNumber","senderEmail",
+const FEDEX_COLS = ["senderContactName","senderCompany","senderTin","senderContactNumber","senderEmail",
   "senderLine1","senderLine2","senderLine3","senderPostcode","senderState","senderCity","senderCountry",
   "recipientContactName","recipientCompany","recipientTin","recipientContactNumber","recipientEmail",
   "recipientLine1","recipientLine2","recipientLine3","recipientPostcode","recipientState","recipientCity","recipientCountry",
   "packageType","numberOfPackages","packageWeight","weightUnits","length","width","height","currencyType",
   "commodityType","itemDescription","harmonizedCode","manufacturingCountry","commodityQuantity","commodityMeasureUnit",
-  "commodityWeight","customsValue","purposeOfShipment","generateInvoice","etdEnabled","shipDate","serviceType"];
+  "commodityWeight","customsValue","purposeOfShipment","generateInvoice","etdEnabled","shipDate","serviceType",
+  "paymentType","taxPaymentType","taxPayerAccount",
+  "cpscProductId","cpscProductIdType","cpscDisclaimCode","cpscIntendedUseCode"];
 function fedexRow(s){
   const st = S.settings, c = calc(s), snd = st.sender;
-  const ref = s.ids.length>1 ? `${s.ids[0]} +${s.ids.length-1}` : s.ids[0];
   const ymd = (s.shipDate||todayISO()).replace(/-/g,"");
+  const cp = s.cpscOn;
   return {
-    reference: ref, invNumber: s.ids[0],
+    paymentType: "SENDER",
+    taxPaymentType: s.duty || "RECIPIENT",
+    taxPayerAccount: s.duty==="RECIPIENT" ? String(s.payerAcct||"").replace(/\D/g,"") : "",
+    cpscProductId: cp ? clean(cpscPid(s)) : "",
+    cpscProductIdType: cp ? s.cpscIdType : "",
+    cpscDisclaimCode: cp ? s.cpscDisclaim : "",
+    cpscIntendedUseCode: cp ? clean(s.cpscUse) : "",
     senderContactName: snd.contact, senderCompany: snd.company, senderTin: s.taxId,
     senderContactNumber: fmtPhoneForFedex(snd.phone), senderEmail: snd.email,
     senderLine1: snd.line1, senderLine2: snd.line2, senderLine3: snd.line3,
     senderPostcode: snd.postcode, senderState: "", senderCity: snd.city, senderCountry: snd.country,
-    recipientContactName: s.name, recipientCompany: s.company, recipientTin: s.tin,
+    recipientContactName: s.name, recipientCompany: s.company, recipientTin: clean(s.tin),
     recipientContactNumber: fmtPhoneForFedex(s.phone), recipientEmail: s.email,
     recipientLine1: s.line1, recipientLine2: s.line2, recipientLine3: s.line3,
     recipientPostcode: s.zip, recipientState: fedexState(s.code, s.state), recipientCity: s.city, recipientCountry: s.code,
@@ -1510,7 +1586,7 @@ async function buildFedexXlsx(){
     const row = fedexRow(s);
     const r = ws.addRow(FEDEX_COLS.map(k=>row[k]===undefined?"":row[k]));
     // 전화번호·우편번호·주문번호는 텍스트로
-    ["senderContactNumber","recipientContactNumber","recipientPostcode","senderPostcode","reference","invNumber","shipDate"].forEach(k=>{
+    ["senderContactNumber","recipientContactNumber","recipientPostcode","senderPostcode","shipDate","taxPayerAccount","cpscIntendedUseCode","cpscProductId","recipientTin","senderTin"].forEach(k=>{
       const c = r.getCell(FEDEX_COLS.indexOf(k)+1); c.value = String(row[k]??""); c.numFmt = "@";
     });
   });
@@ -1592,16 +1668,28 @@ function renderSettings(){
       <div class="f"><label>기본 배송 서비스</label><select data-set="service">${SERVICES.map(([v,t])=>`<option value="${v}" ${st.service===v?"selected":""}>${t}</option>`).join("")}</select></div>
     </div>
     <div class="divider"></div>
-    <div class="sec-title">국가별 IOSS / EORI / 세금번호</div>
-    <table class="rules"><tbody>
-      ${st.taxRules.map((r,i)=>`<tr>
-        <td style="width:22%"><input data-rule="${i}" data-rk="label" value="${esc(r.label)}" placeholder="이름"></td>
-        <td><input data-rule="${i}" data-rk="countries" value="${esc(r.countries)}" placeholder="국가 코드 (쉼표로 구분, 예: GB)"></td>
-        <td style="width:22%"><input data-rule="${i}" data-rk="value" value="${esc(r.value)}" placeholder="번호"></td>
-        <td style="width:40px"><button class="mini ghost" data-delrule="${i}">삭제</button></td></tr>`).join("")}
-    </tbody></table>
-    <button class="mini" id="btnAddRule" style="margin-top:6px;">+ 규칙 추가</button>
-    <p class="hint">받는 나라의 코드가 목록에 있으면 그 번호가 자동으로 들어가요. 미리보기에서 건별로 바꿀 수 있어요.</p>
+    <div class="sec-title">국가별 규칙</div>
+    <div class="grid g3" style="margin-bottom:10px;">
+      <div class="f"><label>관세·세금 청구 대상 기본값 (규칙에 없을 때)</label><select data-set="dutyDefault">${DUTY_OPTS.map(([v,t])=>`<option value="${v}" ${st.dutyDefault===v?"selected":""}>${t}</option>`).join("")}</select></div>
+    </div>
+    ${st.rules.map((r,i)=>`<div class="ship" style="margin-top:10px;"><div class="ship-body">
+      <div class="grid g4">
+        <div class="f"><label>규칙 이름</label><input data-rule="${i}" data-rk="label" value="${esc(r.label)}" placeholder="예: 미국"></div>
+        <div class="f span2"><label>적용 국가 코드 (쉼표로 구분)</label><input data-rule="${i}" data-rk="countries" value="${esc(r.countries)}" placeholder="예: US 또는 DE,FR,IT"></div>
+        <div class="f"><label>발송인 세금번호 (IOSS/EORI 등)</label><input data-rule="${i}" data-rk="taxId" value="${esc(r.taxId)}"></div>
+        <div class="f"><label>관세·세금 청구 대상</label><select data-rule="${i}" data-rk="duty"><option value="" ${r.duty?"":"selected"}>기본값 따름</option>${DUTY_OPTS.map(([v,t])=>`<option value="${v}" ${r.duty===v?"selected":""}>${t}</option>`).join("")}</select></div>
+        <div class="f"><label>수취인 추가 정보 이름</label><input data-rule="${i}" data-rk="extraLabel" value="${esc(r.extraLabel)}" placeholder="예: 개인통관번호"></div>
+        <div class="f"><label>추가 정보 필수</label><select data-rule="${i}" data-rk="extraRequired"><option value="" ${r.extraRequired?"":"selected"}>선택 입력</option><option value="1" ${r.extraRequired?"selected":""}>필수 (비면 빨갛게)</option></select></div>
+        <div class="f"><label>CPSC 정보</label><select data-rule="${i}" data-rk="cpscOn"><option value="" ${r.cpscOn?"":"selected"}>넣지 않음</option><option value="1" ${r.cpscOn?"selected":""}>넣음 (규제 준수 정보: 아니오)</option></select></div>
+        <div class="f"><label>CPSC 이유</label><select data-rule="${i}" data-rk="cpscDisclaim">${CPSC_DISCLAIM.map(([v,t])=>`<option value="${v}" ${r.cpscDisclaim===v?"selected":""}>${t}</option>`).join("")}</select></div>
+        <div class="f"><label>CPSC 추가 컨텍스트 코드</label><input data-rule="${i}" data-rk="cpscUse" value="${esc(r.cpscUse)}" placeholder="130.006 = 13세 이상"></div>
+        <div class="f"><label>CPSC 제품 ID 유형</label><select data-rule="${i}" data-rk="cpscIdType">${CPSC_IDTYPES.map(v=>`<option ${r.cpscIdType===v?"selected":""}>${v}</option>`).join("")}</select></div>
+        <div class="f span3"><label>미리보기 안내 메모</label><input data-rule="${i}" data-rk="memo" value="${esc(r.memo)}" placeholder="예: 종이 인보이스 2부 동봉"></div>
+        <div class="f" style="display:flex;align-items:flex-end;justify-content:flex-end;"><button class="mini ghost" data-delrule="${i}">이 규칙 삭제</button></div>
+      </div>
+    </div></div>`).join("")}
+    <button class="mini" id="btnAddRule" style="margin-top:10px;">+ 규칙 추가</button>
+    <p class="hint">받는 나라 코드가 들어 있는 규칙이 자동으로 적용돼요. 한 나라가 여러 규칙에 들어 있으면 위쪽 규칙의 값이 먼저 쓰여요. 미리보기에서 건별로 바꿀 수 있고, CPSC 제품 식별자에는 그 건의 첫 번째 상품 SKU가 들어가요.</p>
     <div class="divider"></div>
     <div class="sec-title">박스 목록 (첫 번째가 기본값)</div>
     <table class="rules"><tbody>
@@ -1613,7 +1701,14 @@ function renderSettings(){
     <p class="hint">순서: 이름 · 가로(cm) · 세로(cm) · 높이(cm) · 무게(kg)</p>
     <button class="mini" id="btnAddBox" style="margin-top:6px;">+ 박스 추가</button>
     <div class="divider"></div>
-    <button class="mini ghost" id="btnResetSettings">기본값으로 되돌리기</button>
+    <div class="sec-title">다른 컴퓨터와 설정 맞추기</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <button class="mini teal" id="btnExportSettings">⬇ 설정 파일로 저장</button>
+      <button class="mini teal" id="btnImportSettings">⬆ 설정 파일 불러오기</button>
+      <input type="file" id="importSettingsFile" accept=".json" style="display:none">
+      <button class="mini ghost" id="btnResetSettings">기본값으로 되돌리기</button>
+    </div>
+    <p class="hint">설정은 이 컴퓨터의 브라우저에만 저장돼요. 한 컴퓨터에서 고친 뒤 파일로 저장하고, 다른 컴퓨터에서 불러오면 똑같이 맞춰져요.</p>
   `;
   const area = $("settingsArea");
   area.querySelectorAll("[data-set]").forEach(el=>{
@@ -1623,13 +1718,37 @@ function renderSettings(){
       o[path[path.length-1]] = el.value; saveSettings();
     });
   });
-  area.querySelectorAll("[data-rule]").forEach(el=>el.addEventListener("input",()=>{ S.settings.taxRules[+el.dataset.rule][el.dataset.rk] = el.value; saveSettings(); }));
+  area.querySelectorAll("[data-rule]").forEach(el=>el.addEventListener(el.tagName==="SELECT"?"change":"input",()=>{
+    const k = el.dataset.rk, r = S.settings.rules[+el.dataset.rule];
+    r[k] = (k==="extraRequired"||k==="cpscOn") ? !!el.value : (k==="countries" ? el.value.toUpperCase() : el.value);
+    saveSettings();
+  }));
   area.querySelectorAll("[data-box]").forEach(el=>el.addEventListener("input",()=>{
     const b = S.settings.boxes[+el.dataset.box]; b[el.dataset.bk] = el.dataset.bk==="name" ? el.value : num(el.value); saveSettings();
   }));
-  area.querySelectorAll("[data-delrule]").forEach(el=>el.onclick=()=>{ S.settings.taxRules.splice(+el.dataset.delrule,1); saveSettings(); renderSettings(); });
+  area.querySelectorAll("[data-delrule]").forEach(el=>el.onclick=()=>{
+    const r = S.settings.rules[+el.dataset.delrule];
+    if(!confirm(`"${r.label||r.countries||"이름 없음"}" 규칙을 삭제할까요?`)) return;
+    S.settings.rules.splice(+el.dataset.delrule,1); saveSettings(); renderSettings();
+  });
+  $("btnExportSettings").onclick = ()=>{
+    const blob = new Blob([JSON.stringify({type:"etsy-fedex-settings", version:2, savedAt:new Date().toISOString(), settings:S.settings}, null, 2)], {type:"application/json"});
+    saveBlob(blob, `fedex-settings_${stamp()}.json`);
+  };
+  $("btnImportSettings").onclick = ()=>$("importSettingsFile").click();
+  $("importSettingsFile").onchange = async e=>{
+    const f = e.target.files[0]; e.target.value = ""; if(!f) return;
+    try{
+      const j = JSON.parse(await f.text());
+      const s = j && j.type==="etsy-fedex-settings" ? j.settings : null;
+      if(!s) throw new Error("형식");
+      if(!confirm("지금 설정을 이 파일의 설정으로 바꿀까요?")) return;
+      S.settings = normalizeSettings(s); saveSettings(); renderSettings();
+      alert("설정을 불러왔어요.");
+    }catch(err){ alert("이 도구에서 저장한 설정 파일이 아니에요."); }
+  };
   area.querySelectorAll("[data-delbox]").forEach(el=>el.onclick=()=>{ if(S.settings.boxes.length<=1) return; S.settings.boxes.splice(+el.dataset.delbox,1); saveSettings(); renderSettings(); });
-  $("btnAddRule").onclick = ()=>{ S.settings.taxRules.push({label:"",countries:"",value:""}); saveSettings(); renderSettings(); };
+  $("btnAddRule").onclick = ()=>{ S.settings.rules.push({label:"",countries:"",taxId:"",duty:"",extraLabel:"",extraRequired:false,cpscOn:false,cpscDisclaim:"A",cpscUse:"130.006",cpscIdType:"SKU",memo:""}); saveSettings(); renderSettings(); };
   $("btnAddBox").onclick = ()=>{ S.settings.boxes.push({name:"새 박스",l:0,w:0,h:0,kg:0}); saveSettings(); renderSettings(); };
   $("btnResetSettings").onclick = ()=>{ if(!confirm("설정을 처음 값으로 되돌릴까요?")) return; S.settings = structuredClone(DEFAULT_SETTINGS); saveSettings(); renderSettings(); };
 }
