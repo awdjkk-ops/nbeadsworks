@@ -357,6 +357,39 @@ const SERVICES = [
   ["FEDEX_INTERNATIONAL_CONNECT_PLUS","International Connect Plus"],
   ["FEDEX_INTERNATIONAL_PRIORITY","International Priority"]
 ];
+/* 국가별 전화 국가번호 */
+const DIAL = (()=>{
+  const m = {};
+  const add = (code, list) => list.split(" ").forEach(c=>m[c]=code);
+  add("1","US CA PR VI GU AS MP BS BB AG AI BM VG KY DM DO GD JM MS KN LC VC SX TC TT");
+  add("7","RU KZ"); add("20","EG"); add("27","ZA"); add("30","GR"); add("31","NL"); add("32","BE"); add("33","FR");
+  add("34","ES"); add("36","HU"); add("39","IT VA"); add("40","RO"); add("41","CH"); add("43","AT"); add("44","GB GG JE IM");
+  add("45","DK"); add("46","SE"); add("47","NO SJ"); add("48","PL"); add("49","DE"); add("51","PE"); add("52","MX");
+  add("53","CU"); add("54","AR"); add("55","BR"); add("56","CL"); add("57","CO"); add("58","VE"); add("60","MY");
+  add("61","AU CX CC"); add("62","ID"); add("63","PH"); add("64","NZ"); add("65","SG"); add("66","TH"); add("81","JP");
+  add("82","KR"); add("84","VN"); add("86","CN"); add("90","TR"); add("91","IN"); add("92","PK"); add("93","AF");
+  add("94","LK"); add("95","MM"); add("98","IR"); add("212","MA"); add("213","DZ"); add("216","TN"); add("218","LY");
+  add("220","GM"); add("221","SN"); add("225","CI"); add("233","GH"); add("234","NG"); add("237","CM"); add("250","RW");
+  add("251","ET"); add("254","KE"); add("255","TZ"); add("256","UG"); add("260","ZM"); add("263","ZW"); add("264","NA");
+  add("267","BW"); add("230","MU"); add("248","SC"); add("261","MG"); add("262","RE YT");
+  add("297","AW"); add("298","FO"); add("299","GL"); add("350","GI"); add("351","PT"); add("352","LU"); add("353","IE");
+  add("354","IS"); add("355","AL"); add("356","MT"); add("357","CY"); add("358","FI AX"); add("359","BG"); add("370","LT");
+  add("371","LV"); add("372","EE"); add("373","MD"); add("374","AM"); add("375","BY"); add("376","AD"); add("377","MC");
+  add("378","SM"); add("380","UA"); add("381","RS"); add("382","ME"); add("383","XK"); add("385","HR"); add("386","SI");
+  add("387","BA"); add("389","MK"); add("420","CZ"); add("421","SK"); add("423","LI");
+  add("501","BZ"); add("502","GT"); add("503","SV"); add("504","HN"); add("505","NI"); add("506","CR"); add("507","PA");
+  add("509","HT"); add("590","GP BL MF"); add("591","BO"); add("592","GY"); add("593","EC"); add("594","GF"); add("595","PY");
+  add("596","MQ"); add("597","SR"); add("598","UY"); add("599","CW BQ");
+  add("670","TL"); add("673","BN"); add("675","PG"); add("676","TO"); add("677","SB"); add("678","VU"); add("679","FJ");
+  add("680","PW"); add("685","WS"); add("687","NC"); add("689","PF"); add("691","FM"); add("692","MH");
+  add("852","HK"); add("853","MO"); add("855","KH"); add("856","LA"); add("880","BD"); add("886","TW");
+  add("960","MV"); add("961","LB"); add("962","JO"); add("963","SY"); add("964","IQ"); add("965","KW"); add("966","SA");
+  add("967","YE"); add("968","OM"); add("970","PS"); add("971","AE"); add("972","IL"); add("973","BH"); add("974","QA");
+  add("975","BT"); add("976","MN"); add("977","NP"); add("992","TJ"); add("993","TM"); add("994","AZ"); add("995","GE");
+  add("996","KG"); add("998","UZ");
+  return m;
+})();
+function phonePH(code){ return DIAL[code] ? `+${DIAL[code]} 전화번호` : "+국가번호 전화번호"; }
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 const SETTINGS_KEY = "etsyFedexSettings.v2";
@@ -989,7 +1022,7 @@ function shipHTML(s, i){
       <div class="sec-title">받는 사람</div>
       <div class="grid g4">
         ${fld(s,"name","이름",{max:35,cls:"span2"})}
-        ${fld(s,"phone","전화번호 (국가번호 포함)",{ph:"+1 5551234567"})}
+        ${fld(s,"phone",`전화번호 (국가번호 ${DIAL[s.code]?"+"+DIAL[s.code]:""} 포함)`,{ph:phonePH(s.code)})}
         ${fld(s,"email","이메일 (선택)")}
         ${fld(s,"line1","주소 1",{max:35,cls:"span2"})}
         ${fld(s,"line2","주소 2",{max:35,cls:"span2"})}
@@ -1396,146 +1429,236 @@ function saveBlob(blob, name){
    인보이스 엑셀 (ExcelJS)
    ===================================================================== */
 async function buildInvXlsx(s){
-  const D = invoiceData(s);
+  /* 처음 받은 인보이스 엑셀과 같은 구조:
+     - 인쇄 영역 A~K (A4 세로, 100%, 가로 가운데, 맑은 고딕 9)
+     - 오른쪽 M~V열 = 입력 영역 (인쇄 안 됨). 여기 값을 고치면 인보이스가 함수로 다시 계산됨 */
+  const D = invoiceData(s), st = S.settings, c = calc(s);
   const wb = new ExcelJS.Workbook();
+  wb.calcProperties.fullCalcOnLoad = true;
   const ws = wb.addWorksheet("Invoice", {
-    pageSetup:{paperSize:9, orientation:"portrait", fitToPage:true, fitToWidth:1, fitToHeight:0,
-      margins:{left:0.4,right:0.4,top:0.5,bottom:0.5,header:0.2,footer:0.2}},
+    pageSetup:{paperSize:9, orientation:"portrait", scale:100, fitToPage:false, horizontalCentered:true,
+      margins:{left:0.118, right:0.197, top:0.236, bottom:0.158, header:0.512, footer:0.512}},
     views:[{showGridLines:false}]
   });
-  // A=여백, B=No, C-F=설명, G=HS/SKU, H=원산지/PID, I=수량, J=단가, K=합계
-  const widths = {A:2,B:8,C:16,D:16,E:16,F:12,G:15,H:15,I:9,J:11,K:12};
-  Object.entries(widths).forEach(([k,v])=>ws.getColumn(k).width = v);
-  const base = {name:"Arial", size:9};
-  const thin = {style:"thin"}, med = {style:"medium"};
-  const set = (addr, v, opt={}) => {
-    const c = ws.getCell(addr); c.value = v;
-    c.font = Object.assign({}, base, opt.font||{});
-    if(opt.align) c.alignment = opt.align;
-    if(opt.fmt) c.numFmt = opt.fmt;
-    return c;
+  const W = {A:1,B:9,C:9,D:9,E:9,F:9,G:9,H:9,I:9,J:9,K:9,L:3,M:46,N:13,O:7,P:10,Q:12,R:11,S:11,T:13,U:12,V:10};
+  Object.entries(W).forEach(([k,v])=>ws.getColumn(k).width = v);
+  const FONT = "맑은 고딕";
+  const NUM = "0.00_ ";
+  const thin = {style:"thin"};
+  const IN_FILL = {type:"pattern", pattern:"solid", fgColor:{argb:"FFFFF6D5"}};
+  const HEAD_FILL = {type:"pattern", pattern:"solid", fgColor:{argb:"FFEFE9DA"}};
+  const qs = t => '"' + String(t).replace(/"/g,'""') + '"';
+  const set = (addr, v, o={}) => {
+    const cell = ws.getCell(addr);
+    cell.value = v;
+    cell.font = Object.assign({name:FONT, size:9}, o.font||{});
+    if(o.b) cell.font = Object.assign({}, cell.font, {bold:true});
+    if(o.sz) cell.font = Object.assign({}, cell.font, {size:o.sz});
+    if(o.align) cell.alignment = o.align;
+    if(o.fmt) cell.numFmt = o.fmt;
+    if(o.fill) cell.fill = o.fill;
+    return cell;
   };
-  const box = (r1,c1,r2,c2, style=thin) => {
-    for(let r=r1;r<=r2;r++) for(let c=c1;c<=c2;c++){
-      const cell = ws.getCell(r,c); const b = Object.assign({}, cell.border||{});
-      if(r===r1) b.top = style; if(r===r2) b.bottom = style; if(c===c1) b.left = style; if(c===c2) b.right = style;
+  const F = (formula, result) => ({formula: String(formula).replace(/^=/,""), result});
+  const edge = (r1,c1,r2,c2) => {
+    for(let r=r1;r<=r2;r++) for(let cc=c1;cc<=c2;cc++){
+      const cell = ws.getCell(r,cc); const b = Object.assign({}, cell.border||{});
+      if(r===r1) b.top = thin; if(r===r2) b.bottom = thin; if(cc===c1) b.left = thin; if(cc===c2) b.right = thin;
       cell.border = b;
     }
   };
-  const B = {font:{bold:true}};
+  const vline = (r1,r2,col) => { for(let r=r1;r<=r2;r++){ const cell = ws.getCell(r,col); cell.border = Object.assign({}, cell.border||{}, {left:thin}); } };
+  const ymd = iso => { const [y,m,d] = (iso||todayISO()).split("-").map(Number); return new Date(Date.UTC(y,m-1,d)); };
+  const DATEFMT = '[$-409]d-mmm yyyy';
 
-  ws.mergeCells("B1:K1"); set("B1","COMMERCIAL INVOICE",{font:{bold:true,size:16},align:{horizontal:"center"}}); ws.getRow(1).height = 26;
-  // 발송인
-  let r = 2;
-  set(`B${r}`,"SHIPPER/EXPORTER",B); set(`G${r}`,"INVOICE/Order No.:",B); set(`I${r}`,D.orderNo,B); r++;
-  set(`B${r}`,`Tax ID#: ${D.taxId}`,B); set(`G${r}`,"DATE OF INVOICE:",B); set(`I${r}`,D.invDate); r++;
-  set(`B${r}`,`Contact Name: ${D.sender.contact}`,B); set(`G${r}`,"Ship Date:",B); set(`I${r}`,D.shipDate); r++;
-  set(`B${r}`,`TEL: ${D.senderPhone}`); r++;
-  set(`B${r}`,`E-Mail: ${D.sender.email}`); r++;
-  set(`B${r}`,"Company Name/Address:",B); r++;
-  const blk = String(D.sender.invoiceBlock||"").split("\n");
-  const rRight = 8;
-  set(`G${rRight}`,`PURPOSE OF SHIPMENT: ${D.purpose}`,B);
-  set(`G${rRight+1}`,`ORIGIN OF COUNTRY: ${D.origin}`,B);
-  set(`G${rRight+2}`,"REMARK:",B);
-  ws.mergeCells(`H${rRight+2}:K${rRight+6}`); set(`H${rRight+2}`, D.remark, {align:{wrapText:true, vertical:"top"}});
-  blk.forEach(ln=>{ set(`B${r}`, ln); r++; });
-  const shipEnd = Math.max(r, rRight+7) ;
-  box(2,2,shipEnd-1,6); box(2,7,7,11); box(8,7,shipEnd-1,11);
-  // 수취인
-  const c0 = shipEnd;
-  r = c0;
-  set(`B${r}`,"CONSIGNEE",B); set(`G${r}`,"BUYER/IMPORTER : Same as Consignee",B); r++;
-  set(`B${r}`,`Tax ID#: ${D.consignee.tin||""}`,B); r++;
-  /* (Tax ID# 줄 = 수취인 추가 정보: 개인통관번호 등) */
-  set(`B${r}`,`Contact Name : ${D.consignee.name}`,B); r++;
-  set(`B${r}`,`TEL : ${D.consignee.phone}`,B); r++;
-  set(`B${r}`,`E-Mail : ${D.consignee.email||""}`,B); r++;
-  set(`B${r}`,"Company Name/Address:",B); r++;
-  D.consignee.lines.forEach(ln=>{ set(`B${r}`, ln); r++; });
-  const consEnd = r;
-  box(c0,2,consEnd-1,6); box(c0,7,consEnd-1,11);
-  // 상품 표
-  const h = consEnd;
-  const heads = [["B","No. of\nPackages"],["C","Description of Goods"],["G","Harmonized\nTariff Number"],["H","Country\nof Origin"],["I","Quantity\n(Set)"],["J","Unit\nValue"],["K","Total\nValue"]];
-  ws.mergeCells(`C${h}:F${h}`);
-  heads.forEach(([col,t])=>set(`${col}${h}`, t, {font:{bold:true,size:8.5}, align:{horizontal:"center",vertical:"middle",wrapText:true}}));
-  ws.getRow(h).height = 28;
-  ["B","C","G","H","I","J","K"].forEach((col,i)=>{ const cs={B:[2,2],C:[3,6],G:[7,7],H:[8,8],I:[9,9],J:[10,10],K:[11,11]}[col]; box(h,cs[0],h,cs[1]); });
-  const g = h+1;
-  ws.mergeCells(`C${g}:F${g}`);
-  set(`B${g}`,1,{align:{horizontal:"center",vertical:"top"}});
-  set(`C${g}`,D.desc,{font:{bold:true},align:{wrapText:true,vertical:"top"}});
-  set(`G${g}`,D.hs,{align:{horizontal:"center",vertical:"top"}});
-  set(`H${g}`,D.origin,{align:{horizontal:"center",vertical:"top"}});
-  set(`I${g}`,D.qty,{align:{horizontal:"center",vertical:"top"}});
-  set(`J${g}`,D.unitValue,{fmt:"#,##0.00",align:{vertical:"top"}});
-  set(`K${g}`,D.total,{fmt:"#,##0.00",align:{vertical:"top"}});
-  ws.getRow(g).height = 48;
-  set(`J${g+1}`,"Currency:",B); set(`K${g+1}`,D.currency,{font:{bold:true},align:{horizontal:"right"}});
-  const goodsEnd = g+8;
-  box(h+1,2,goodsEnd,11);
-  r = goodsEnd+1;
-  set(`B${r}`,"SPECIAL INSTRUCTIONS",B); set(`B${r+1}`,D.special);
-  box(r,2,r+3,11);
-  r += 4;
-  set(`B${r}`,"SIGNED BY",B);
-  box(r,2,r+4,11);
-  try{
-    const id = wb.addImage({base64: SIG_JPG, extension:"jpeg"});
-    ws.addImage(id, {tl:{col:2, row:r}, ext:{width:150, height:36}});
-  }catch(e){}
-  r += 5;
-  ws.getRow(r-1).addPageBreak();
+  /* ---------- 입력 영역 (M~N, 2~21행) ---------- */
+  let lines = consigneeLines(s);
+  if(lines.length > 6) lines = lines.slice(0,5).concat([lines.slice(5).join(", ")]);
+  while(lines.length < 6) lines.push("");
+  set("M2", "입력 영역 (인쇄되지 않아요) — 노란 칸을 고치면 인보이스가 자동으로 바뀌어요", {b:true, font:{color:{argb:"FF7F2F45"}}});
+  const inputs = [
+    ["주문번호", D.orderNo], ["주문날짜 (DATE OF INVOICE)", ymd(s.invDate), DATEFMT], ["발송일자 (Ship Date)", ymd(s.shipDate), DATEFMT],
+    ["내 세금번호 (IOSS / EORI 등)", s.taxId||""], ["수취인 Tax ID / 통관번호", clean(s.tin)],
+    ["수취인 이름", s.name], ["수취인 TEL", D.consignee.phone], ["수취인 E-Mail", s.email||""],
+    ["주소 1", lines[0]], ["주소 2", lines[1]], ["주소 3", lines[2]], ["주소 4", lines[3]], ["주소 5", lines[4]], ["주소 6", lines[5]],
+    ["품명 (Description of Goods)", s.desc], ["HS 코드", s.hs], ["원산지", st.origin], ["통화", st.currency],
+    ["전체 할인 % (벨류 줄이기)", num(s.globalPct)]
+  ];
+  inputs.forEach(([label, val, fmt], i)=>{
+    const r = 3 + i;
+    set(`M${r}`, label, {b:true, align:{horizontal:"right"}});
+    set(`N${r}`, val, {fill:IN_FILL, fmt, align:{horizontal:"left"}});
+    if(r===17){ ws.mergeCells(`N17:V17`); }
+  });
+  // N3 주문번호 · N4 날짜 · N5 발송일 · N6 내 세금번호 · N7 고객 세금번호 · N8 이름 · N9 TEL · N10 이메일
+  // N11~N16 주소 · N17 품명 · N18 HS · N19 원산지 · N20 통화 · N21 전체 할인 %
+  set("M22", "상품은 아래 Order List 각 줄 오른쪽(M~U열)에서 고치세요. 할인 %는 10 = 10% 예요.", {font:{color:{argb:"FF6B7280"}}});
 
-  // Order List
-  const PER = 28;
-  const pages = Math.max(1, Math.ceil(D.list.length/PER));
+  /* ---------- 1페이지: COMMERCIAL INVOICE ---------- */
+  ws.mergeCells("A1:K1");
+  set("A1", "COMMERCIAL INVOICE", {b:true, sz:16, align:{horizontal:"center", vertical:"middle"}});
+  ws.getRow(1).height = 37.5;
+  for(let r=2;r<=50;r++) ws.getRow(r).height = 15;
+  ws.getRow(25).height = 16.5;
+  const snd = st.sender;
+  set("B2", "SHIPPER/EXPORTER", {b:true});
+  set("B3", F(`="Tax ID#: "&N6`, `Tax ID#: ${s.taxId||""}`), {b:true});
+  set("B4", `Contact Name: ${snd.contact}`, {b:true});
+  set("B5", `TEL: ${st.invoicePhone}`);
+  set("B6", `E-Mail: ${snd.email}`);
+  set("B7", "Company Name/Address:", {b:true});
+  let blk = String(snd.invoiceBlock||"").split("\n");
+  if(blk.length > 5) blk = blk.slice(0,4).concat([blk.slice(4).join(" ")]);
+  blk.forEach((ln,i)=>set(`B${8+i}`, ln));
+  set("G2", "INVOICE/Order No.:", {b:true});
+  ws.mergeCells("I2:K2"); set("I2", F("=N3", D.orderNo), {b:true, align:{shrinkToFit:true}});
+  set("G3", "DATE OF INVOICE:", {b:true}); ws.mergeCells("I3:K3"); ws.mergeCells("I4:K4"); set("I3", F("=N4", ymd(s.invDate)), {fmt:DATEFMT, align:{horizontal:"left"}});
+  set("G4", "Ship Date:", {b:true}); set("I4", F("=N5", ymd(s.shipDate)), {fmt:DATEFMT, align:{horizontal:"left"}});
+  set("G8", `PURPOSE OF SHIPMENT: ${st.purposeText}`, {b:true});
+  set("G9", F(`="ORIGIN OF COUNTRY: "&N19`, `ORIGIN OF COUNTRY: ${st.origin}`), {b:true});
+  set("G10", "REMARK:", {b:true});
+  ws.mergeCells("H10:K12"); set("H10", F("=N17", s.desc), {sz:8, align:{wrapText:true, vertical:"top"}});
+  edge(2,1,12,6); edge(2,7,7,11); edge(8,7,12,11);
+
+  set("B13", "CONSIGNEE", {b:true});
+  set("G13", "BUYER/IMPORTER : Same as Consignee", {b:true});
+  set("B14", F(`="Tax ID#: "&N7`, `Tax ID#: ${clean(s.tin)}`), {b:true});
+  set("B15", F(`="Contact Name : "&N8`, `Contact Name : ${s.name}`), {b:true});
+  set("B16", F(`="TEL : "&N9`, `TEL : ${D.consignee.phone}`), {b:true});
+  set("B17", F(`="E-Mail : "&N10`, `E-Mail : ${s.email||""}`), {b:true});
+  set("B18", "Company Name/Address:", {b:true});
+  for(let i=0;i<6;i++) set(`B${19+i}`, F(`=IF(N${11+i}="","",N${11+i})`, lines[i]));
+  edge(13,1,24,6); edge(13,7,24,11);
+
+  // 상품 표 머리
+  ws.mergeCells("C25:F26");
+  const hd = (addr, t, sz=9) => set(addr, t, {b:true, sz, align:{horizontal:"center", vertical:"middle"}});
+  hd("B25","No. of"); hd("B26","Packages"); hd("C25","Description of Goods");
+  hd("G25","Harmonized",7); hd("G26","Tariff Number",7); hd("H25","Country"); hd("H26","of Origin");
+  hd("I25","Quantity"); hd("I26","(Set)"); hd("J25","Unit"); hd("J26","Value"); hd("K25","Total"); hd("K26","Value");
+  edge(25,1,26,11); [3,7,8,9,10,11].forEach(col=>vline(25,26,col));
+
+  /* ---------- Order List 줄 배치 ---------- */
+  const rows = [];
+  let lastOid = null;
+  s.lines.forEach((l,j)=>{
+    if(s.ids.length>1 && l.oid!==lastOid){ rows.push({kind:"sep", label:`ORDER ${s.ids.indexOf(l.oid)+1}`}); lastOid = l.oid; }
+    rows.push({kind:"item", l, res:c.rows[j]});
+    const ci = s.coupons.findIndex(cp=>cp.oid===l.oid);
+    const next = s.lines[j+1] ? s.lines[j+1].oid : null;
+    if(ci>=0 && next!==l.oid) rows.push({kind:"coupon", cp:s.coupons[ci], res:c.cps[ci]});
+  });
+  const PER = 28, P0 = 51, PAGE = 35;
+  const pages = Math.max(1, Math.ceil(rows.length/PER));
+  const first = P0 + 4, last = P0 + PAGE*(pages-1) + 3 + PER;
+  const rng = col => `$${col}$${first}:$${col}$${last}`;
+  const subCells = [];
+
+  // 상품 줄 (페이지마다 28줄)
   let running = 0;
   for(let p=0;p<pages;p++){
-    r += 1;
-    ws.mergeCells(`B${r}:K${r}`); set(`B${r}`,"Order List",{font:{bold:true,size:14},align:{horizontal:"center"}}); ws.getRow(r).height = 22; r++;
-    set(`B${r}`,"Order No.:",B); ws.mergeCells(`C${r}:H${r}`); set(`C${r}`,D.orderNo); r++;
-    set(`B${r}`,"PAGE No.:",B); set(`C${r}`,p+1,{align:{horizontal:"left"}}); set(`J${r}`,`Currency:  ${D.currency}`,B); r++;
-    const hr = r;
-    ws.mergeCells(`C${hr}:F${hr}`);
-    [["B","No."],["C","Item Name"],["G","SKU"],["H","No-standard\nPID"],["I","Qty."],["J","Unit Price"],["K","Amount"]]
-      .forEach(([col,t])=>set(`${col}${hr}`,t,{font:{bold:true,size:8.5},align:{horizontal:"center",vertical:"middle",wrapText:true}}));
-    ws.getRow(hr).height = 26;
-    box(hr,2,hr,11,thin);
-    r++;
-    const items = D.list.slice(p*PER,(p+1)*PER);
+    const ps = P0 + PAGE*p;
+    ws.mergeCells(`A${ps}:K${ps}`);
+    set(`A${ps}`, "Order List", {b:true, sz:16, align:{horizontal:"center", vertical:"middle"}});
+    ws.getRow(ps).height = 35.25;
+    for(let cc=1;cc<=11;cc++){ ws.getCell(ps,cc).border = {bottom:thin}; }
+    set(`B${ps+1}`, "Order No.:", {b:true}); set(`C${ps+1}`, F("=$I$2", D.orderNo)); ws.getRow(ps+1).height = 13.5;
+    set(`B${ps+2}`, "PAGE No.:", {b:true}); set(`C${ps+2}`, p+1, {align:{horizontal:"left"}});
+    set(`J${ps+2}`, F(`="Currency:  "&$N$20`, `Currency:  ${st.currency}`), {b:true}); ws.getRow(ps+2).height = 14.25;
+    const h = ps+3;
+    ws.mergeCells(`C${h}:F${h}`);
+    [["B","No."],["C","Item Name"],["G","SKU"],["H","No-standard PID"],["I","Qty."],["J","Unit Price"],["K","Amount"]]
+      .forEach(([col,t])=>set(`${col}${h}`, t, {b:true, sz:col==="H"?7:9, align:{horizontal:"center", vertical:"middle", wrapText:true}}));
+    ws.getRow(h).height = 22.5;
+    if(p===0){
+      [["M","상품명 (여기서 수정)"],["N","구분"],["O","수량"],["P","원래 단가"],["Q","상품별 할인 %"],["R","단가 차감 $"],["S","쿠폰 할인 %"],["T","주문번호"],["U","SKU"],["V","금액 (자동)"]]
+        .forEach(([col,t])=>set(`${col}${h}`, t, {b:true, fill:HEAD_FILL, align:{horizontal:"center", vertical:"middle", wrapText:true}}));
+    }
     let sub = 0;
     for(let i=0;i<PER;i++){
-      const it = items[i];
+      const r = h+1+i, it = rows[p*PER+i];
+      ws.getRow(r).height = 22.5;
       ws.mergeCells(`C${r}:F${r}`);
-      ws.getRow(r).height = 24;
-      if(it){
-        if(it.sep){ set(`C${r}`, it.text, {font:{bold:true,color:{argb:"FF3A5A63"}}, align:{vertical:"middle"}}); }
-        else{
-          set(`B${r}`,it.no,{align:{horizontal:"center",vertical:"middle"}});
-          set(`C${r}`,it.name,{font:{size:8},align:{wrapText:true,vertical:"middle"}});
-          set(`G${r}`,it.sku,{font:{size:8},align:{horizontal:"center",vertical:"middle"}});
-          set(`H${r}`,it.pid,{font:{size:8},align:{horizontal:"center",vertical:"middle"}});
-          set(`I${r}`,it.qty,{align:{horizontal:"center",vertical:"middle"}});
-          set(`J${r}`,it.unit,{fmt:"#,##0.00",align:{vertical:"middle"}});
-          set(`K${r}`,it.amount,{fmt:"#,##0.00",align:{vertical:"middle"}});
-          sub = r2(sub + it.amount);
-        }
+      // 입력 칸 값
+      let M="",N="",O="",P="",Q="",R="",Sx="",T="",U="";
+      let resB="", resC="", resI="", resJ="", resK="", resV="";
+      if(it && it.kind==="sep"){ N = it.label; resC = it.label; }
+      if(it && it.kind==="item"){
+        const l = it.l; M = l.name; O = l.qty; P = l.price; Q = num(l.pct)||""; R = num(l.minus)||""; T = l.oid; U = l.sku||"";
+        resC = l.name; resI = l.qty; resJ = it.res.unit; resK = it.res.amount; resV = it.res.amount;
       }
-      for(let c=2;c<=11;c++){ const cell = ws.getCell(r,c); cell.border = Object.assign({}, cell.border, {bottom:{style:"hair"}}); }
-      r++;
+      if(it && it.kind==="coupon"){
+        M = it.cp.label; N = "쿠폰"; O = 1; Sx = Math.round(it.cp.rate*1e6)/1e4; T = it.cp.oid;
+        resC = it.cp.label; resI = 1; resJ = it.res.amount; resK = it.res.amount;
+      }
+      if(it && it.kind!=="sep") sub = r2(sub + resK);
+      [["M",M],["N",N],["O",O],["P",P],["Q",Q],["R",R],["S",Sx],["T",T],["U",U]].forEach(([col,v])=>{
+        set(`${col}${r}`, v===""?null:v, {fill:IN_FILL, sz:col==="M"?8:9, fmt: col==="P"||col==="R" ? NUM : undefined});
+      });
+      // 번호: 상품명이 있는 줄만 순서대로
+      const cnt = rows.slice(0, p*PER+i+1).filter(x=>x.kind!=="sep").length;
+      if(it && it.kind!=="sep") resB = cnt;
+      set(`B${r}`, F(`IF(M${r}="","",COUNTIF($M$${first}:M${r},"<>"))`, resB), {align:{horizontal:"center", vertical:"middle"}});
+      const isSep = it && it.kind==="sep";
+      set(`C${r}`, F(`IF(M${r}<>"",M${r},IF(LEFT(N${r},5)="ORDER",N${r},""))`, resC),
+        {sz: isSep?9:7.5, b:isSep, font: isSep?{color:{argb:"FF3A5A63"}}:{}, align:{wrapText:true, vertical: isSep?"middle":"top"}});
+      set(`G${r}`, F(`IF(U${r}="","",U${r})`, U), {sz:8, align:{horizontal:"center", vertical:"middle", shrinkToFit:true}});
+      set(`H${r}`, F(`IF(U${r}="","",${qs(st.pidPrefix)}&U${r})`, U ? st.pidPrefix+U : ""), {sz:8, align:{horizontal:"center", vertical:"middle", shrinkToFit:true}});
+      set(`I${r}`, F(`IF(M${r}="","",O${r})`, resI), {align:{horizontal:"center", vertical:"middle"}});
+      const unitF = `ROUND(MAX(0,P${r}*(1-Q${r}/100)-R${r})*(1-$N$21/100),2)`;
+      set(`V${r}`, F(`IF(OR(M${r}="",N${r}="쿠폰"),"",ROUND(${unitF}*O${r},2))`, resV), {fmt:NUM});
+      set(`J${r}`, F(`IF(M${r}="","",IF(N${r}="쿠폰",-ROUND(S${r}/100*SUMIF(${rng("T")},T${r},${rng("V")}),2),${unitF}))`, resJ), {fmt:NUM, align:{vertical:"middle"}});
+      set(`K${r}`, F(`IF(M${r}="","",IF(N${r}="쿠폰",J${r},V${r}))`, resK), {fmt:NUM, align:{vertical:"middle"}});
     }
+    edge(h, 1, h+PER, 11);
+    for(let r=h;r<=h+PER;r++){
+      [3,7,8,9,10,11].forEach(col=>{ const cell = ws.getCell(r,col); cell.border = Object.assign({}, cell.border||{}, {left:thin}); });
+      if(r>h) for(let cc=1;cc<=11;cc++){ const cell = ws.getCell(r,cc); cell.border = Object.assign({}, cell.border||{}, {top:thin}); }
+    }
+    const sr = h+PER+1, tr = sr+1;
     running = r2(running + sub);
-    ws.mergeCells(`C${r}:F${r}`); set(`C${r}`,"Sub Total",B); set(`K${r}`,sub,{font:{bold:true},fmt:"#,##0.00"}); r++;
-    ws.mergeCells(`C${r}:F${r}`); set(`C${r}`,"Item Total",B); set(`K${r}`,p===pages-1?D.total:running,{font:{bold:true},fmt:"#,##0.00"}); r++;
-    box(hr,2,r-1,11);
-    ws.getRow(r-1).addPageBreak();
-    r += 1;
+    set(`B${sr}`, "Sub Total", {b:true, align:{vertical:"middle"}});
+    set(`K${sr}`, F(`SUM(K${h+1}:K${h+PER})`, sub), {b:true, fmt:NUM, align:{vertical:"middle"}});
+    subCells.push(`K${sr}`);
+    set(`B${tr}`, "Item Total", {b:true, align:{vertical:"middle"}});
+    set(`K${tr}`, F(`SUM(${subCells.join(",")})`, running), {b:true, fmt:NUM, align:{vertical:"middle"}});
+    ws.getRow(sr).height = 22.5; ws.getRow(tr).height = 22.5; ws.getRow(tr+1).height = 24.75;
+    edge(sr,1,sr,11); edge(tr,1,tr,11);
+    if(p < pages-1) ws.getRow(tr+1).addPageBreak();
   }
-  ws.pageSetup.printArea = `A1:K${r}`;
+
+  // 상품 표 본문 (1페이지)
+  ws.mergeCells("C28:F31");
+  set("B28", 1, {b:true, align:{horizontal:"center", vertical:"top"}});
+  set("C28", F("=N17", s.desc), {b:true, sz:8, align:{wrapText:true, vertical:"top"}});
+  set("G28", F("=N18", s.hs), {sz:8, align:{horizontal:"center", vertical:"top", shrinkToFit:true}});
+  set("H28", F("=N19", st.origin), {sz:8, align:{horizontal:"center", vertical:"top", shrinkToFit:true}});
+  set("I28", F(`COUNTIFS(${rng("M")},"<>",${rng("N")},"<>쿠폰")`, c.qty), {b:true, align:{horizontal:"center", vertical:"top"}});
+  set("K28", F(`SUM(${subCells.join(",")})`, c.total), {b:true, fmt:NUM, align:{vertical:"top"}});
+  set("J28", F(`IF(I28=0,0,ROUND(K28/I28,2))`, c.unitValue), {b:true, fmt:NUM, align:{vertical:"top"}});
+  for(let cc=2;cc<=11;cc++){ const cell = ws.getCell(32,cc); cell.border = Object.assign({}, cell.border||{}, {top:{style:"hair"}}); }
+  set("J33", "Currency:", {b:true});
+  set("K33", F("=N20", st.currency), {b:true, align:{horizontal:"right"}});
+  edge(27,1,40,11);
+  set("B41", "SPECIAL INSTRUCTIONS", {b:true});
+  set("B42", st.special);
+  edge(41,1,44,11);
+  set("B45", "SIGNED BY", {b:true});
+  edge(45,1,49,11);
+  try{
+    const id = wb.addImage({base64: SIG_JPG, extension:"jpeg"});
+    ws.addImage(id, {tl:{col:1.4, row:45.3}, ext:{width:160, height:38}});
+  }catch(e){}
+  ws.getRow(50).addPageBreak();
+
+  const lastRow = P0 + PAGE*pages - 1;
+  ws.pageSetup.printArea = `A1:K${lastRow}`;
   const buf = await wb.xlsx.writeBuffer();
-  return new Blob([buf], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  // ExcelJS가 인쇄 범위를 $A1:$K85 형태로 써서 일부 프로그램이 무시함 → $A$1:$K$85로 고쳐 저장
+  const zip = await JSZip.loadAsync(buf);
+  const wx = await zip.file("xl/workbook.xml").async("string");
+  zip.file("xl/workbook.xml", wx.replace(/(_xlnm\.Print_Area"[^>]*>[^<]*!)[^<]*</, (m,g)=> g + "$A$1:$K$" + lastRow + "<"));
+  return await zip.generateAsync({type:"blob", mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
 }
 
 /* =====================================================================
