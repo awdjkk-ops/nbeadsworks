@@ -423,10 +423,10 @@ const DEFAULT_SETTINGS = {
   pidPrefix: "BM",
   special: "Order list or packing list is attached",
   rules: [
-    {label:"유럽 (EU)", countries:EU.join(","), taxId:"IM3720000224", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", memo:""},
-    {label:"영국", countries:"GB", taxId:"370 6004 28", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", memo:""},
-    {label:"싱가포르", countries:"SG", taxId:"SGM90373362R", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", memo:""},
-    {label:"미국", countries:"US", taxId:"", duty:"SENDER", extraLabel:"", extraRequired:false, cpscOn:true, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", memo:""}
+    {label:"유럽 (EU)", countries:EU.join(","), taxId:"IM3720000224", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:true, euStd:"NA", memo:""},
+    {label:"영국", countries:"GB", taxId:"370 6004 28", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:false, euStd:"NA", memo:""},
+    {label:"싱가포르", countries:"SG", taxId:"SGM90373362R", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:false, euStd:"NA", memo:""},
+    {label:"미국", countries:"US", taxId:"", duty:"SENDER", extraLabel:"", extraRequired:false, cpscOn:true, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:false, euStd:"NA", memo:""}
   ],
   boxes: [
     {name:"소", l:23, w:16, h:7, kg:0.49},
@@ -457,7 +457,11 @@ function normalizeSettings(s){
   const out = Object.assign(d, s, { sender: Object.assign(d.sender, s.sender||{}) });
   if(!Array.isArray(out.rules)) out.rules = structuredClone(DEFAULT_SETTINGS.rules);
   const blank = DEFAULT_SETTINGS.rules[0];
-  out.rules = out.rules.map(r=>Object.assign({}, blank, {label:"",countries:"",taxId:"",duty:"",extraLabel:"",extraRequired:false,cpscOn:false,memo:""}, r));
+  out.rules = out.rules.map(r=>{
+    const x = Object.assign({}, blank, {label:"",countries:"",taxId:"",duty:"",extraLabel:"",extraRequired:false,cpscOn:false,memo:"",euStd:"NA"}, r);
+    if(!("euIdOn" in r)){ const cs = String(r.countries||"").toUpperCase(); x.euIdOn = /\bBE\b/.test(cs) && /\bDE\b/.test(cs); }
+    return x;
+  });
   if(!Array.isArray(out.boxes) || !out.boxes.length) out.boxes = structuredClone(DEFAULT_SETTINGS.boxes);
   return out;
 }
@@ -847,7 +851,8 @@ function updateSelInfo(){
 /* 국가별 규칙: 해당 국가가 들어 있는 규칙을 위에서부터 합침 (먼저 나온 값 우선) */
 function ruleFor(code){
   const st = S.settings;
-  const r = {taxId:"", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", memos:[], names:[]};
+  const r = {taxId:"", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:false, euStd:"NA", memos:[], names:[]};
+  let euSet = false;
   let cpscSet = false;
   for(const x of st.rules){
     const cs = String(x.countries||"").toUpperCase().split(/[\s,]+/).filter(Boolean);
@@ -857,6 +862,7 @@ function ruleFor(code){
     if(!r.duty && x.duty) r.duty = x.duty;
     if(!r.extraLabel && x.extraLabel){ r.extraLabel = x.extraLabel; r.extraRequired = !!x.extraRequired; }
     if(!cpscSet && x.cpscOn){ cpscSet = true; r.cpscOn = true; r.cpscDisclaim = x.cpscDisclaim||"A"; r.cpscUse = x.cpscUse||""; r.cpscIdType = x.cpscIdType||"SKU"; }
+    if(!euSet && x.euIdOn){ euSet = true; r.euIdOn = true; r.euStd = x.euStd ?? "NA"; }
     if(x.memo) r.memos.push(x.memo);
   }
   if(!r.duty) r.duty = st.dutyDefault || "RECIPIENT";
@@ -867,6 +873,7 @@ function applyRule(s){
   const r = ruleFor(s.code);
   s.taxId = r.taxId; s.duty = r.duty; s.extraLabel = r.extraLabel; s.extraRequired = r.extraRequired;
   s.cpscOn = r.cpscOn; s.cpscDisclaim = r.cpscDisclaim; s.cpscUse = r.cpscUse; s.cpscIdType = r.cpscIdType;
+  s.euIdOn = r.euIdOn; s.euStd = r.euStd; s.euMerchant = null; s.euNonStd = null;
   s.memos = r.memos; s.ruleNames = r.names;
 }
 function firstSku(s){ const l = s.lines.find(x=>x.sku); return l ? l.sku : ""; }
@@ -912,6 +919,8 @@ function makeShip(ids){
   return s;
 }
 function cpscPid(s){ return s.cpscPid!=null ? s.cpscPid : firstSku(s); }
+function euMerchant(s){ return s.euMerchant!=null ? s.euMerchant : firstSku(s); }
+function euNonStd(s){ if(s.euNonStd!=null) return s.euNonStd; const k = firstSku(s); return k ? S.settings.pidPrefix + k : ""; }
 function buildShips(){
   const groups = groupsFromSelection();
   const keep = new Map(S.ships.map(s=>[s.ids.join(","), s]));
@@ -1050,7 +1059,7 @@ function shipHTML(s, i){
         ${fld(s,"shipDate","Ship Date (발송일)",{type:"date"})}
       </div>
       <div class="divider"></div>
-      <div class="sec-title">청구 · CPSC</div>
+      <div class="sec-title">청구 · CPSC · EU 제품 ID</div>
       <div class="grid g4">
         <div class="f"><label>운송비 청구 대상</label><input value="내 고객번호" disabled style="background:#f7f6f2;color:var(--muted)"></div>
         <div class="f"><label>관세·세금·수수료 청구 대상</label><select data-k="duty">${DUTY_OPTS.map(([v,t])=>`<option value="${v}" ${s.duty===v?"selected":""}>${t}</option>`).join("")}</select></div>
@@ -1061,6 +1070,12 @@ function shipHTML(s, i){
         <div class="f cpscf"><label>이유 선택</label><select data-k="cpscDisclaim">${CPSC_DISCLAIM.map(([v,t])=>`<option value="${v}" ${s.cpscDisclaim===v?"selected":""}>${t}</option>`).join("")}</select></div>
         ${fld(s,"cpscUse","추가 컨텍스트 코드",{cls:"cpscf",ph:"130.006 = 13세 이상"})}
         <div class="f cpscf"><label>제품 ID 유형 · 제품 식별자</label><div style="display:flex;gap:6px;"><select data-k="cpscIdType" style="width:44%">${CPSC_IDTYPES.map(v=>`<option ${s.cpscIdType===v?"selected":""}>${v}</option>`).join("")}</select><input data-k="cpscPid" value="${esc(cpscPid(s))}" placeholder="첫 상품 SKU"></div></div>
+      </div>
+      <div class="grid g4" style="margin-top:10px;">
+        <div class="f"><label>EU 제품 ID 넣기</label><select data-k="euIdOn"><option value="1" ${s.euIdOn?"selected":""}>넣음</option><option value="" ${s.euIdOn?"":"selected"}>넣지 않음</option></select></div>
+        <div class="f euf"><label>판매자 제품 ID</label><input data-k="euMerchant" value="${esc(euMerchant(s))}" placeholder="첫 상품 SKU"></div>
+        <div class="f euf"><label>표준화되지 않은 제조업체 제품 ID</label><input data-k="euNonStd" value="${esc(euNonStd(s))}" placeholder="BM+SKU"></div>
+        <div class="f euf"><label>표준화된 제조업체 제품 ID (바코드)</label><input data-k="euStd" value="${esc(s.euStd??"")}" placeholder="NA"></div>
       </div>
       <div class="divider"></div>
       <div class="sec-title">상품 · 신고 금액</div>
@@ -1135,6 +1150,9 @@ function refreshShip(s){
   const pa = card.querySelector('.f[data-f="payerAcct"]'); if(pa) pa.style.display = s.duty==="RECIPIENT" ? "" : "none";
   const pidIn = card.querySelector('[data-k="cpscPid"]');
   if(pidIn && document.activeElement!==pidIn) pidIn.value = cpscPid(s);
+  card.querySelectorAll(".euf").forEach(x=>x.style.opacity = s.euIdOn ? "1" : ".35");
+  const emIn = card.querySelector('[data-k="euMerchant"]'); if(emIn && document.activeElement!==emIn) emIn.value = euMerchant(s);
+  const enIn = card.querySelector('[data-k="euNonStd"]'); if(enIn && document.activeElement!==enIn) enIn.value = euNonStd(s);
   const memo = card.querySelector("[data-memo]");
   if(memo){
     const rn = (s.ruleNames||[]).length ? `<b>적용 규칙:</b> ${esc(s.ruleNames.join(", "))}` : "";
@@ -1178,6 +1196,9 @@ shipsEl.addEventListener("input", e=>{
     if(k==="boxIdx") return;
     if(k==="cpscOn"){ s.cpscOn = !!t.value; refreshShip(s); return; }
     if(k==="cpscPid"){ s.cpscPid = t.value; return; }
+    if(k==="euIdOn"){ s.euIdOn = !!t.value; refreshShip(s); return; }
+    if(k==="euMerchant"){ s.euMerchant = t.value; return; }
+    if(k==="euNonStd"){ s.euNonStd = t.value; return; }
     s[k] = t.value;
     if(k==="code"){
       s.countryName = CODE_TO_NAME[t.value]||t.value; applyRule(s);
@@ -1672,7 +1693,8 @@ const FEDEX_COLS = ["senderContactName","senderCompany","senderTin","senderConta
   "commodityType","itemDescription","harmonizedCode","manufacturingCountry","commodityQuantity","commodityMeasureUnit",
   "commodityWeight","customsValue","purposeOfShipment","generateInvoice","etdEnabled","shipDate","serviceType",
   "paymentType","taxPaymentType","taxPayerAccount",
-  "cpscProductId","cpscProductIdType","cpscDisclaimCode","cpscIntendedUseCode"];
+  "cpscProductId","cpscProductIdType","cpscDisclaimCode","cpscIntendedUseCode",
+  "euDeMinimisMerchantProductId","euDeMinimisNonStandardManufacturerProductId","euDeMinimisStandardManufacturerProductId"];
 function fedexRow(s){
   const st = S.settings, c = calc(s), snd = st.sender;
   const ymd = (s.shipDate||todayISO()).replace(/-/g,"");
@@ -1685,6 +1707,9 @@ function fedexRow(s){
     cpscProductIdType: cp ? s.cpscIdType : "",
     cpscDisclaimCode: cp ? s.cpscDisclaim : "",
     cpscIntendedUseCode: cp ? clean(s.cpscUse) : "",
+    euDeMinimisMerchantProductId: s.euIdOn ? clean(euMerchant(s)) : "",
+    euDeMinimisNonStandardManufacturerProductId: s.euIdOn ? clean(euNonStd(s)) : "",
+    euDeMinimisStandardManufacturerProductId: s.euIdOn ? clean(s.euStd) : "",
     senderContactName: snd.contact, senderCompany: snd.company, senderTin: s.taxId,
     senderContactNumber: fmtPhoneForFedex(snd.phone), senderEmail: snd.email,
     senderLine1: snd.line1, senderLine2: snd.line2, senderLine3: snd.line3,
@@ -1709,7 +1734,7 @@ async function buildFedexXlsx(){
     const row = fedexRow(s);
     const r = ws.addRow(FEDEX_COLS.map(k=>row[k]===undefined?"":row[k]));
     // 전화번호·우편번호·주문번호는 텍스트로
-    ["senderContactNumber","recipientContactNumber","recipientPostcode","senderPostcode","shipDate","taxPayerAccount","cpscIntendedUseCode","cpscProductId","recipientTin","senderTin"].forEach(k=>{
+    ["senderContactNumber","recipientContactNumber","recipientPostcode","senderPostcode","shipDate","taxPayerAccount","cpscIntendedUseCode","cpscProductId","recipientTin","senderTin","euDeMinimisMerchantProductId","euDeMinimisNonStandardManufacturerProductId","euDeMinimisStandardManufacturerProductId"].forEach(k=>{
       const c = r.getCell(FEDEX_COLS.indexOf(k)+1); c.value = String(row[k]??""); c.numFmt = "@";
     });
   });
@@ -1807,6 +1832,8 @@ function renderSettings(){
         <div class="f"><label>CPSC 이유</label><select data-rule="${i}" data-rk="cpscDisclaim">${CPSC_DISCLAIM.map(([v,t])=>`<option value="${v}" ${r.cpscDisclaim===v?"selected":""}>${t}</option>`).join("")}</select></div>
         <div class="f"><label>CPSC 추가 컨텍스트 코드</label><input data-rule="${i}" data-rk="cpscUse" value="${esc(r.cpscUse)}" placeholder="130.006 = 13세 이상"></div>
         <div class="f"><label>CPSC 제품 ID 유형</label><select data-rule="${i}" data-rk="cpscIdType">${CPSC_IDTYPES.map(v=>`<option ${r.cpscIdType===v?"selected":""}>${v}</option>`).join("")}</select></div>
+        <div class="f"><label>EU 제품 ID (첫 상품 SKU / BM+SKU)</label><select data-rule="${i}" data-rk="euIdOn"><option value="" ${r.euIdOn?"":"selected"}>넣지 않음</option><option value="1" ${r.euIdOn?"selected":""}>넣음</option></select></div>
+        <div class="f"><label>표준화된 제조업체 제품 ID (바코드)</label><input data-rule="${i}" data-rk="euStd" value="${esc(r.euStd??"NA")}" placeholder="NA"></div>
         <div class="f span3"><label>미리보기 안내 메모</label><input data-rule="${i}" data-rk="memo" value="${esc(r.memo)}" placeholder="예: 종이 인보이스 2부 동봉"></div>
         <div class="f" style="display:flex;align-items:flex-end;justify-content:flex-end;"><button class="mini ghost" data-delrule="${i}">이 규칙 삭제</button></div>
       </div>
@@ -1843,7 +1870,7 @@ function renderSettings(){
   });
   area.querySelectorAll("[data-rule]").forEach(el=>el.addEventListener(el.tagName==="SELECT"?"change":"input",()=>{
     const k = el.dataset.rk, r = S.settings.rules[+el.dataset.rule];
-    r[k] = (k==="extraRequired"||k==="cpscOn") ? !!el.value : (k==="countries" ? el.value.toUpperCase() : el.value);
+    r[k] = (k==="extraRequired"||k==="cpscOn"||k==="euIdOn") ? !!el.value : (k==="countries" ? el.value.toUpperCase() : el.value);
     saveSettings();
   }));
   area.querySelectorAll("[data-box]").forEach(el=>el.addEventListener("input",()=>{
@@ -1871,7 +1898,7 @@ function renderSettings(){
     }catch(err){ alert("이 도구에서 저장한 설정 파일이 아니에요."); }
   };
   area.querySelectorAll("[data-delbox]").forEach(el=>el.onclick=()=>{ if(S.settings.boxes.length<=1) return; S.settings.boxes.splice(+el.dataset.delbox,1); saveSettings(); renderSettings(); });
-  $("btnAddRule").onclick = ()=>{ S.settings.rules.push({label:"",countries:"",taxId:"",duty:"",extraLabel:"",extraRequired:false,cpscOn:false,cpscDisclaim:"A",cpscUse:"130.006",cpscIdType:"SKU",memo:""}); saveSettings(); renderSettings(); };
+  $("btnAddRule").onclick = ()=>{ S.settings.rules.push({label:"",countries:"",taxId:"",duty:"",extraLabel:"",extraRequired:false,cpscOn:false,cpscDisclaim:"A",cpscUse:"130.006",cpscIdType:"SKU",euIdOn:false,euStd:"NA",memo:""}); saveSettings(); renderSettings(); };
   $("btnAddBox").onclick = ()=>{ S.settings.boxes.push({name:"새 박스",l:0,w:0,h:0,kg:0}); saveSettings(); renderSettings(); };
   $("btnResetSettings").onclick = ()=>{ if(!confirm("설정을 처음 값으로 되돌릴까요?")) return; S.settings = structuredClone(DEFAULT_SETTINGS); saveSettings(); renderSettings(); };
 }
