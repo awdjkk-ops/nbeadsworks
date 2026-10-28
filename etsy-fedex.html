@@ -423,7 +423,7 @@ const DEFAULT_SETTINGS = {
   pidPrefix: "BM",
   special: "Order list or packing list is attached",
   rules: [
-    {label:"유럽 (EU)", countries:EU.join(","), taxId:"IM3720000224", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:true, euStd:"NA", memo:""},
+    {label:"유럽 (EU)", countries:EU.join(","), hs:"7117.19", taxId:"IM3720000224", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:true, euStd:"NA", memo:""},
     {label:"영국", countries:"GB", taxId:"370 6004 28", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:false, euStd:"NA", memo:""},
     {label:"싱가포르", countries:"SG", taxId:"SGM90373362R", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:false, euStd:"NA", memo:""},
     {label:"미국", countries:"US", taxId:"", duty:"SENDER", extraLabel:"", extraRequired:false, cpscOn:true, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:false, euStd:"NA", memo:""}
@@ -459,7 +459,9 @@ function normalizeSettings(s){
   const blank = DEFAULT_SETTINGS.rules[0];
   out.rules = out.rules.map(r=>{
     const x = Object.assign({}, blank, {label:"",countries:"",taxId:"",duty:"",extraLabel:"",extraRequired:false,cpscOn:false,memo:"",euStd:"NA"}, r);
-    if(!("euIdOn" in r)){ const cs = String(r.countries||"").toUpperCase(); x.euIdOn = /\bBE\b/.test(cs) && /\bDE\b/.test(cs); }
+    const isEU = (()=>{ const cs = String(r.countries||"").toUpperCase(); return /\bBE\b/.test(cs) && /\bDE\b/.test(cs); })();
+    if(!("euIdOn" in r)) x.euIdOn = isEU;
+    if(!("hs" in r)) x.hs = isEU ? "7117.19" : "";
     return x;
   });
   if(!Array.isArray(out.boxes) || !out.boxes.length) out.boxes = structuredClone(DEFAULT_SETTINGS.boxes);
@@ -851,7 +853,7 @@ function updateSelInfo(){
 /* 국가별 규칙: 해당 국가가 들어 있는 규칙을 위에서부터 합침 (먼저 나온 값 우선) */
 function ruleFor(code){
   const st = S.settings;
-  const r = {taxId:"", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:false, euStd:"NA", memos:[], names:[]};
+  const r = {taxId:"", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:false, euStd:"NA", hs:"", memos:[], names:[]};
   let euSet = false;
   let cpscSet = false;
   for(const x of st.rules){
@@ -860,6 +862,7 @@ function ruleFor(code){
     r.names.push(x.label || cs.join(","));
     if(!r.taxId && x.taxId) r.taxId = x.taxId;
     if(!r.duty && x.duty) r.duty = x.duty;
+    if(!r.hs && x.hs) r.hs = x.hs;
     if(!r.extraLabel && x.extraLabel){ r.extraLabel = x.extraLabel; r.extraRequired = !!x.extraRequired; }
     if(!cpscSet && x.cpscOn){ cpscSet = true; r.cpscOn = true; r.cpscDisclaim = x.cpscDisclaim||"A"; r.cpscUse = x.cpscUse||""; r.cpscIdType = x.cpscIdType||"SKU"; }
     if(!euSet && x.euIdOn){ euSet = true; r.euIdOn = true; r.euStd = x.euStd ?? "NA"; }
@@ -871,6 +874,7 @@ function ruleFor(code){
 function taxIdFor(code){ return ruleFor(code).taxId; }
 function applyRule(s){
   const r = ruleFor(s.code);
+  s.hs = r.hs || S.settings.hs;
   s.taxId = r.taxId; s.duty = r.duty; s.extraLabel = r.extraLabel; s.extraRequired = r.extraRequired;
   s.cpscOn = r.cpscOn; s.cpscDisclaim = r.cpscDisclaim; s.cpscUse = r.cpscUse; s.cpscIdType = r.cpscIdType;
   s.euIdOn = r.euIdOn; s.euStd = r.euStd; s.euMerchant = null; s.euNonStd = null;
@@ -999,12 +1003,13 @@ function shipHTML(s, i){
   let rowsHTML = "";
   s.lines.forEach((l,j)=>{
     if(multi && l.oid!==lastOid){
-      rowsHTML += `<tr class="ordsep"><td colspan="9">ORDER ${s.ids.indexOf(l.oid)+1} <span style="font-weight:500;color:var(--muted)">· #${l.oid}</span></td></tr>`; lastOid = l.oid;
+      rowsHTML += `<tr class="ordsep"><td colspan="10">ORDER ${s.ids.indexOf(l.oid)+1} <span style="font-weight:500;color:var(--muted)">· #${l.oid}</span></td></tr>`; lastOid = l.oid;
     }
     rowsHTML += `<tr data-line="${j}">
       <td class="r">${j+1}</td>
       <td class="nm"><div title="${esc(l.name)}">${esc(l.name)}</div>${l.variations?`<small>${esc(l.variations)}</small>`:""}</td>
       <td><input class="cell l w90" data-lk="sku" value="${esc(l.sku)}"></td>
+      <td data-out="nspid" style="color:var(--muted);white-space:nowrap;">${esc(l.pid||"")}</td>
       <td class="r"><input class="cell w60" data-lk="qty" type="number" min="0" step="1" value="${l.qty}"></td>
       <td class="r">$${money(l.price)}</td>
       <td class="r"><input class="cell w60" data-lk="pct" type="number" min="0" max="100" step="1" value="${l.pct||""}" placeholder="%"></td>
@@ -1015,7 +1020,7 @@ function shipHTML(s, i){
     const cIdx = s.coupons.findIndex(c=>c.oid===l.oid);
     const nextOid = s.lines[j+1] ? s.lines[j+1].oid : null;
     if(cIdx>=0 && nextOid!==l.oid){
-      rowsHTML += `<tr class="coupon"><td></td><td colspan="6">🏷️ ${esc(s.coupons[cIdx].label)} <small style="color:var(--muted)">(조정된 금액에 같은 비율로 적용)</small></td><td></td><td class="r" data-cp="${cIdx}"></td></tr>`;
+      rowsHTML += `<tr class="coupon"><td></td><td colspan="7">🏷️ ${esc(s.coupons[cIdx].label)} <small style="color:var(--muted)">(조정된 금액에 같은 비율로 적용)</small></td><td></td><td class="r" data-cp="${cIdx}"></td></tr>`;
     }
   });
   return `<div class="ship ${s.open?"":"closed"}" data-uid="${s.uid}">
@@ -1087,7 +1092,7 @@ function shipHTML(s, i){
       </div>
       <div style="overflow-x:auto;">
       <table class="items"><thead><tr>
-        <th class="r">No</th><th>상품명</th><th>SKU</th><th class="r">수량</th><th class="r">원래 단가</th><th class="r">할인 %</th><th class="r">단가 차감</th><th class="r">신고 단가</th><th class="r">금액</th>
+        <th class="r">No</th><th>상품명</th><th>SKU (M-PID)</th><th>NS-PID</th><th class="r">수량</th><th class="r">원래 단가</th><th class="r">할인 %</th><th class="r">단가 차감</th><th class="r">신고 단가</th><th class="r">금액</th>
       </tr></thead><tbody>${rowsHTML}</tbody></table>
       </div>
       <div class="totals">
@@ -1211,7 +1216,7 @@ shipsEl.addEventListener("input", e=>{
     refreshShip(s);
   } else if(t.dataset.lk){
     const j = +t.closest("tr").dataset.line, l = s.lines[j], k = t.dataset.lk;
-    if(k==="sku"){ l.sku = t.value.trim(); l.pid = l.sku ? S.settings.pidPrefix + l.sku : ""; }
+    if(k==="sku"){ l.sku = t.value.trim(); l.pid = l.sku ? S.settings.pidPrefix + l.sku : ""; t.closest("tr").querySelector('[data-out="nspid"]').textContent = l.pid; }
     else if(k==="qty") l.qty = Math.max(0, Math.round(num(t.value)));
     else l[k] = num(t.value);
     refreshShip(s);
@@ -1348,7 +1353,7 @@ async function buildPdf(s){
   D.consignee.lines.slice(0,7).forEach(ln=>{ if(y < yTable-1.5){ txt(ln, X0+2, y); y += 4.2; } });
   labelVal("BUYER/IMPORTER : ", "Same as Consignee", MID+2, yCons+5);
   // goods table
-  const cols = [X0, X0+20, X0+98, X0+122, X0+142, X0+160, X0+174, X1];
+  const cols = [X0, X0+20, MID, MID+24, MID+44, MID+62, MID+76, X1];
   doc.line(X0, yTable, X1, yTable); doc.line(X0, yTableHead, X1, yTableHead);
   for(let i=1;i<cols.length-1;i++) doc.line(cols[i], yTable, cols[i], yTableHead);
   const hc = (t1,t2,i,sz=8)=>{ const cx=(cols[i]+cols[i+1])/2; font("bold",sz); if(t2){ txt(t1,cx,yTable+3.8,{align:"center"}); txt(t2,cx,yTable+7.6,{align:"center"}); } else txt(t1,cx,yTable+5.6,{align:"center"}); };
@@ -1824,6 +1829,7 @@ function renderSettings(){
       <div class="grid g4">
         <div class="f"><label>규칙 이름</label><input data-rule="${i}" data-rk="label" value="${esc(r.label)}" placeholder="예: 미국"></div>
         <div class="f span2"><label>적용 국가 코드 (쉼표로 구분)</label><input data-rule="${i}" data-rk="countries" value="${esc(r.countries)}" placeholder="예: US 또는 DE,FR,IT"></div>
+        <div class="f"><label>HS 코드 (비우면 기본값)</label><input data-rule="${i}" data-rk="hs" value="${esc(r.hs||"")}" placeholder="${esc(S.settings.hs)}"></div>
         <div class="f"><label>발송인 세금번호 (IOSS/EORI 등)</label><input data-rule="${i}" data-rk="taxId" value="${esc(r.taxId)}"></div>
         <div class="f"><label>관세·세금 청구 대상</label><select data-rule="${i}" data-rk="duty"><option value="" ${r.duty?"":"selected"}>기본값 따름</option>${DUTY_OPTS.map(([v,t])=>`<option value="${v}" ${r.duty===v?"selected":""}>${t}</option>`).join("")}</select></div>
         <div class="f"><label>수취인 추가 정보 이름</label><input data-rule="${i}" data-rk="extraLabel" value="${esc(r.extraLabel)}" placeholder="예: 개인통관번호"></div>
@@ -1898,7 +1904,7 @@ function renderSettings(){
     }catch(err){ alert("이 도구에서 저장한 설정 파일이 아니에요."); }
   };
   area.querySelectorAll("[data-delbox]").forEach(el=>el.onclick=()=>{ if(S.settings.boxes.length<=1) return; S.settings.boxes.splice(+el.dataset.delbox,1); saveSettings(); renderSettings(); });
-  $("btnAddRule").onclick = ()=>{ S.settings.rules.push({label:"",countries:"",taxId:"",duty:"",extraLabel:"",extraRequired:false,cpscOn:false,cpscDisclaim:"A",cpscUse:"130.006",cpscIdType:"SKU",euIdOn:false,euStd:"NA",memo:""}); saveSettings(); renderSettings(); };
+  $("btnAddRule").onclick = ()=>{ S.settings.rules.push({label:"",countries:"",taxId:"",duty:"",extraLabel:"",extraRequired:false,cpscOn:false,cpscDisclaim:"A",cpscUse:"130.006",cpscIdType:"SKU",euIdOn:false,euStd:"NA",hs:"",memo:""}); saveSettings(); renderSettings(); };
   $("btnAddBox").onclick = ()=>{ S.settings.boxes.push({name:"새 박스",l:0,w:0,h:0,kg:0}); saveSettings(); renderSettings(); };
   $("btnResetSettings").onclick = ()=>{ if(!confirm("설정을 처음 값으로 되돌릴까요?")) return; S.settings = structuredClone(DEFAULT_SETTINGS); saveSettings(); renderSettings(); };
 }
