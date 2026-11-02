@@ -334,6 +334,21 @@
     <p class="hint">인보이스 ZIP에는 발송 건마다 엑셀(.xlsx)과 PDF가 하나씩 들어 있어요. 건별로 받으려면 미리보기 카드 아래 버튼을 쓰세요.</p>
   </div>
 
+  <!-- 5. 엑셀 정리용 -->
+  <div class="card" id="step5" style="display:none;">
+    <div class="step-head">
+      <div class="step-num">5</div>
+      <div class="step-title">엑셀 정리용 데이터</div>
+      <div class="step-side"><label class="chk"><input type="checkbox" id="sumHeader"> 머리글 포함</label></div>
+    </div>
+    <div class="olist" style="max-height:none;"><table class="otable"><thead><tr>
+      <th>주문번호</th><th class="num">주문수량</th><th class="num">주문금액</th><th>국가</th><th>고객이름</th>
+    </tr></thead><tbody id="sumBody"></tbody></table></div>
+    <button class="btn btn-secondary" id="btnCopySum">📋 엑셀용으로 복사</button>
+    <div class="status" id="status5"></div>
+    <p class="hint">복사한 뒤 정리하시는 엑셀의 주문번호 칸을 클릭하고 붙여넣기(Ctrl+V)하면 5칸에 나눠 들어가요. 미리보기에서 값을 고치면 여기도 바로 바뀌어요.</p>
+  </div>
+
   <!-- 설정 -->
   <div class="card">
     <details class="settings" id="settingsBox">
@@ -431,8 +446,10 @@ const DEFAULT_SETTINGS = {
     {label:"유럽 (EU)", countries:EU.join(","), hs:"7117.19", taxId:"IM3720000224", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:true, euStd:"NA", memo:""},
     {label:"영국", countries:"GB", taxId:"370 6004 28", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:false, euStd:"NA", memo:""},
     {label:"싱가포르", countries:"SG", taxId:"SGM90373362R", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:false, euStd:"NA", memo:""},
-    {label:"미국", countries:"US", taxId:"", duty:"SENDER", extraLabel:"", extraRequired:false, cpscOn:true, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:false, euStd:"NA", memo:""}
+    {label:"미국", countries:"US", taxId:"", duty:"SENDER", extraLabel:"", extraRequired:false, cpscOn:true, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:false, euStd:"NA", memo:""},
+    {label:"호주", countries:"AU", hs:"7117.19.00.29", taxId:"", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:false, euStd:"NA", memo:""}
   ],
+  migrated: ["au-hs"],
   boxes: [
     {name:"소", l:23, w:16, h:7, kg:0.49},
     {name:"중", l:32, w:23, h:17, kg:3},
@@ -470,12 +487,23 @@ function normalizeSettings(s){
     return x;
   });
   if(!Array.isArray(out.boxes) || !out.boxes.length) out.boxes = structuredClone(DEFAULT_SETTINGS.boxes);
+  if(!Array.isArray(s.migrated)) out.migrated = [];
+  if(!out.migrated.includes("au-hs")){
+    const hasAU = out.rules.some(r=>String(r.countries||"").toUpperCase().split(/[\s,]+/).includes("AU"));
+    if(!hasAU) out.rules.push(structuredClone(DEFAULT_SETTINGS.rules.find(r=>r.countries==="AU")));
+    else out.rules.forEach(r=>{ if(String(r.countries||"").toUpperCase().split(/[\s,]+/).includes("AU") && !r.hs) r.hs = "7117.19.00.29"; });
+    out.migrated.push("au-hs");
+  }
   return out;
 }
 function loadSettings(){
   try{
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if(raw) return normalizeSettings(JSON.parse(raw));
+    if(raw){
+      const st = normalizeSettings(JSON.parse(raw));
+      try{ localStorage.setItem(SETTINGS_KEY, JSON.stringify(st)); }catch(e){}   // 바뀐 기본 규칙 반영 결과 저장
+      return st;
+    }
   }catch(e){}
   return structuredClone(DEFAULT_SETTINGS);
 }
@@ -608,7 +636,8 @@ function wrap35(lines){
 
 /* SKU */
 function skuFromName(name){
-  const parts = String(name||"").split(" / ").map(s=>s.trim());
+  // "CODE / ...", "CODE/ ...", "CODE // ..." 모두 인식
+  const parts = String(name||"").split(/\s*\/+\s*/).map(s=>s.replace(/\s+/g,""));
   for(const p of parts.slice(0,3)){
     if(/^[A-Z]{1,5}(-?[A-Z0-9]+)+$/.test(p) && /\d/.test(p)) return p.replace(/-/g,"");
   }
@@ -959,7 +988,7 @@ function buildShips(){
   const keep = new Map(S.ships.map(s=>[s.ids.join(","), s]));
   S.ships = groups.map(g=> keep.get(g.join(",")) || makeShip(g));
   renderShips();
-  $("step3").style.display = "block"; $("step4").style.display = "block";
+  $("step3").style.display = "block"; $("step4").style.display = "block"; $("step5").style.display = "block";
   $("status4").className = "status";
   $("step3").scrollIntoView({behavior:"smooth", block:"start"});
 }
@@ -1022,7 +1051,41 @@ function renderShips(){
   $("shipInfo").textContent = `발송 ${S.ships.length}건`;
   $("ships").innerHTML = S.ships.map((s,i)=>shipHTML(s,i)).join("") || `<div class="empty">발송 건이 없어요.</div>`;
   S.ships.forEach(refreshShip);
+  renderSummary5();
 }
+/* 5. 엑셀 정리용: 주문번호 · 주문수량 · 주문금액 · 국가 · 고객이름 */
+function summaryRows(){
+  return S.ships.map(s=>{
+    const c = calc(s);
+    const country = s.code==="US" ? "US" : (CODE_TO_NAME[s.code] || s.countryName || "");
+    return [s.ids.map(x=>"#"+x).join(" / "), String(c.qty), money(c.total), country, clean(s.name)];
+  });
+}
+let sumTimer = null;
+function renderSummary5(){
+  clearTimeout(sumTimer);
+  sumTimer = setTimeout(()=>{
+    const body = $("sumBody"); if(!body) return;
+    const rows = summaryRows();
+    body.innerHTML = rows.length ? rows.map(r=>`<tr><td>${esc(r[0])}</td><td class="num">${esc(r[1])}</td><td class="num">${esc(r[2])}</td><td>${esc(r[3])}</td><td>${esc(r[4])}</td></tr>`).join("")
+      : `<tr><td colspan="5" class="empty">발송 건이 없어요.</td></tr>`;
+  }, 80);
+}
+async function copyText(text){
+  try{ await navigator.clipboard.writeText(text); return true; }catch(e){}
+  try{
+    const ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select(); const ok = document.execCommand("copy"); ta.remove(); return ok;
+  }catch(e){ return false; }
+}
+$("btnCopySum").onclick = async ()=>{
+  const rows = summaryRows();
+  if(!rows.length) return;
+  const lines = ($("sumHeader").checked ? [["주문번호","주문수량","주문금액","국가","고객이름"]] : []).concat(rows)
+    .map(r=>r.map(v=>String(v).replace(/[\t\r\n]+/g," ")).join("\t"));
+  const ok = await copyText(lines.join("\r\n"));
+  setStatus($("status5"), ok?"ok":"err", ok ? `${rows.length}건을 복사했어요. 엑셀에 붙여넣기(Ctrl+V) 하세요.` : "복사하지 못했어요. 표를 마우스로 드래그해서 복사해 주세요.");
+};
 function shipHTML(s, i){
   const bx = S.settings.boxes;
   const boxOpts = bx.map((b,j)=>`<option value="${j}" ${s.boxIdx==j?"selected":""}>${esc(b.name)} · ${b.l}×${b.w}×${b.h}cm · ${b.kg}kg</option>`).join("") +
@@ -1152,6 +1215,7 @@ function shipHTML(s, i){
 }
 function shipByEl(el){ const c = el.closest(".ship"); return c ? S.ships.find(s=>s.uid==c.dataset.uid) : null; }
 function refreshShip(s){
+  renderSummary5();
   const card = document.querySelector(`.ship[data-uid="${s.uid}"]`); if(!card) return;
   const c = calc(s);
   card.querySelectorAll("tr[data-line]").forEach(tr=>{
@@ -1344,9 +1408,10 @@ function prettyPhone(p){
   return String(p||"").trim().replace(/^00/, "+").replace(/\s+/g," ");
 }
 function fileBase(s){
-  const nm = (s.name||"invoice").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"") || "invoice";
+  // 엣시에서 가져온 이름 그대로(대소문자·띄어쓰기 유지) + (월-일). 파일명에 쓸 수 없는 문자만 뺌
+  const nm = clean(s.name).replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").replace(/[. ]+$/,"").trim() || "invoice";
   const [y,m,d] = (s.invDate||todayISO()).split("-");
-  return `${nm}${m}-${d}`;
+  return `${nm}(${m}-${d})`;
 }
 
 /* =====================================================================
