@@ -450,6 +450,8 @@ const DEFAULT_SETTINGS = {
     {label:"호주", countries:"AU", hs:"7117.19.00.29", taxId:"", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:false, euStd:"NA", memo:""}
   ],
   migrated: ["au-hs"],
+  addresses: [],
+  randomMin: 2, randomMax: 5,
   boxes: [
     {name:"소", l:23, w:16, h:7, kg:0.49},
     {name:"중", l:32, w:23, h:17, kg:3},
@@ -487,6 +489,7 @@ function normalizeSettings(s){
     return x;
   });
   if(!Array.isArray(out.boxes) || !out.boxes.length) out.boxes = structuredClone(DEFAULT_SETTINGS.boxes);
+  if(!Array.isArray(out.addresses)) out.addresses = [];
   if(!Array.isArray(s.migrated)) out.migrated = [];
   if(!out.migrated.includes("au-hs")){
     const hasAU = out.rules.some(r=>String(r.countries||"").toUpperCase().split(/[\s,]+/).includes("AU"));
@@ -776,7 +779,8 @@ function renderPick(){
         <th style="width:34px;"></th><th>주문번호</th><th>주문일</th><th>수취인</th><th>국가</th><th class="num">상품</th><th class="num">금액</th>
       </tr></thead><tbody id="obody"></tbody></table></div>
       <div id="bundleArea"></div>
-      <button class="btn btn-secondary" id="btnPreview" disabled>미리보기 만들기</button>`;
+      <button class="btn" id="btnRandom" style="background:#8a6a10;">🎲 랜덤 항목 인보이스 만들기</button>
+      <button class="btn btn-secondary" id="btnPreview" disabled style="margin-top:10px;">미리보기 만들기</button>`;
     $("q").addEventListener("input", e=>{ S.query = e.target.value; renderRows(); });
     $("q").addEventListener("keydown", e=>{
       if(e.key==="Enter"){ // 검색된 주문번호 바로 선택
@@ -788,6 +792,7 @@ function renderPick(){
     $("btnSelShown").onclick = ()=>{ visibleOrders().forEach(o=>{ if(!S.selected.includes(o.id)) S.selected.push(o.id); }); renderRows(); renderBundles(); updateSelInfo(); };
     $("btnClearSel").onclick = ()=>{ S.selected=[]; S.bundles=[]; renderRows(); renderBundles(); updateSelInfo(); };
     $("btnPreview").onclick = buildShips;
+    $("btnRandom").onclick = addRandomShip;
     $("obody").addEventListener("change", e=>{
       const cb = e.target.closest("input[data-id]"); if(!cb) return;
       toggleSel(cb.dataset.id, cb.checked);
@@ -983,10 +988,69 @@ function makeShip(ids){
 function cpscPid(s){ return s.cpscPid!=null ? s.cpscPid : firstSku(s); }
 function euMerchant(s){ return s.euMerchant!=null ? s.euMerchant : firstSku(s); }
 function euNonStd(s){ if(s.euNonStd!=null) return s.euNonStd; const k = firstSku(s); return k ? S.settings.pidPrefix + k : ""; }
+/* ---------- 랜덤 항목 인보이스 ---------- */
+function randomPool(){
+  const st = S.settings, lo = num(st.randomMin)||2, hi = num(st.randomMax)||5;
+  const seen = new Map();
+  for(const o of S.orders.values()) for(const it of o.items){
+    const key = clean(it.name).toLowerCase();
+    if(seen.has(key)) continue;
+    if(!(it.price >= lo && it.price <= hi)) continue;
+    const sku = skuFromName(it.name); if(!sku) continue;          // 예약·배송 업그레이드 등 코드 없는 상품 제외
+    seen.set(key, {name:clean(it.name), variations:"", sku, price:it.price});
+  }
+  return [...seen.values()];
+}
+function drawRandom(s, n){
+  const used = new Set(s.lines.map(l=>clean(l.name).toLowerCase()));
+  const pool = randomPool().filter(x=>!used.has(x.name.toLowerCase()));
+  for(let i=pool.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [pool[i],pool[j]] = [pool[j],pool[i]]; }
+  return pool.slice(0, n).map(x=>({oid:s.ids[0], name:x.name, variations:x.variations, sku:x.sku, pid:S.settings.pidPrefix+x.sku,
+    qty: 1 + Math.floor(Math.random()*2), price:x.price, pct:0, minus:0, skuAuto:true}));
+}
+function setRandomCount(s, n){
+  n = Math.max(1, Math.round(num(n))||1);
+  if(n < s.lines.length) s.lines.splice(n);
+  else if(n > s.lines.length){
+    const add = drawRandom(s, n - s.lines.length);
+    s.lines.push(...add);
+    if(s.lines.length < n) alert(`조건($${S.settings.randomMin}~$${S.settings.randomMax}, 겹치지 않음)에 맞는 상품이 ${s.lines.length}개뿐이라 ${s.lines.length}줄까지만 넣었어요.`);
+  }
+  s.randomCount = s.lines.length;
+  s.origTotal = r2(s.lines.reduce((t,l)=>t+l.qty*l.price,0));
+}
+function applyAddress(s, a){
+  ["name","company","phone","email","line1","line2","line3","city","state","zip","tin"].forEach(k=>s[k] = a[k]||"");
+  s.code = a.code||""; s.countryName = CODE_TO_NAME[s.code]||s.code;
+  const keepTin = s.tin; applyRule(s); s.tin = keepTin;
+}
+function addRandomShip(){
+  if(!S.orders.size){ alert("먼저 엣시 주문 파일을 올려 주세요. 그 파일 안의 상품에서 뽑아요."); return; }
+  const box = S.settings.boxes[0] || {l:23,w:16,h:7,kg:0.49};
+  const rid = "R" + Date.now().toString().slice(-6);
+  const s = {
+    uid: ++uid, ids:[rid], random:true, refNo:"", open:true,
+    name:"", company:"", phone:"", email:"", tin:"", payerAcct:"",
+    line1:"", line2:"", line3:"", city:"", state:"", zip:"", code:"", countryName:"",
+    boxIdx:0, l:box.l, w:box.w, h:box.h, kg:box.kg, service:S.settings.service, cpscPid:null,
+    hs:S.settings.hs, desc:S.settings.description, invDate:todayISO(), shipDate:todayISO(),
+    globalPct:0, lines:[], coupons:[], origTotal:0
+  };
+  applyRule(s);
+  if(S.settings.addresses.length) applyAddress(s, S.settings.addresses[0]);
+  setRandomCount(s, 20);
+  s.origTotal = r2(s.lines.reduce((a,l)=>a+l.qty*l.price,0));
+  S.ships.push(s);
+  renderShips();
+  $("step3").style.display = "block"; $("step4").style.display = "block"; $("step5").style.display = "block";
+  const card = document.querySelector(`.ship[data-uid="${s.uid}"]`); if(card) card.scrollIntoView({behavior:"smooth", block:"start"});
+}
+function orderNoOf(s, sep){ return s.random ? (clean(s.refNo) || "-") : s.ids.map(x=>"#"+x).join(sep); }
+
 function buildShips(){
   const groups = groupsFromSelection();
   const keep = new Map(S.ships.map(s=>[s.ids.join(","), s]));
-  S.ships = groups.map(g=> keep.get(g.join(",")) || makeShip(g));
+  S.ships = groups.map(g=> keep.get(g.join(",")) || makeShip(g)).concat(S.ships.filter(x=>x.random));
   renderShips();
   $("step3").style.display = "block"; $("step4").style.display = "block"; $("step5").style.display = "block";
   $("status4").className = "status";
@@ -1058,7 +1122,7 @@ function summaryRows(){
   return S.ships.map(s=>{
     const c = calc(s);
     const country = s.code==="US" ? "US" : (CODE_TO_NAME[s.code] || s.countryName || "");
-    return [s.ids.map(x=>"#"+x).join(" / "), String(c.qty), money(c.total), country, clean(s.name)];
+    return [orderNoOf(s, " / "), String(c.qty), money(c.total), country, clean(s.name)];
   });
 }
 let sumTimer = null;
@@ -1131,11 +1195,23 @@ function shipHTML(s, i){
       <span class="caret">▼</span>
       <div class="ship-idx">${i+1}</div>
       <div><div class="ship-title">${esc(s.name)} <span class="ship-meta">· ${esc(CODE_TO_NAME[s.code]||s.countryName)}</span></div>
-        <div class="ship-meta">${s.ids.map(x=>"#"+x).join(" + ")}${multi?" (묶음)":""}</div></div>
+        <div class="ship-meta">${s.random ? `🎲 랜덤 항목 인보이스${s.refNo?" · "+esc(s.refNo):""}` : s.ids.map(x=>"#"+x).join(" + ")+(multi?" (묶음)":"")}</div></div>
       <div class="ship-badges" data-badges></div>
     </div>
     <div class="ship-body">
       <div data-memo></div>
+      ${s.random ? `<div class="adjust" style="background:#fff8e6;">
+        <b style="color:var(--warn)">🎲 랜덤</b>
+        <span style="font-size:12.5px;">상품 줄 수</span>
+        <input class="cell" data-rk2="count" type="number" min="1" step="1" value="${s.lines.length}" style="width:70px;">
+        <button class="mini" data-rnd="redraw">전부 다시 뽑기</button>
+        <span style="font-size:12.5px;margin-left:8px;">주문번호/참조</span>
+        <input class="cell l" data-k="refNo" value="${esc(s.refNo)}" placeholder="예: MOAPOST 655" style="width:150px;">
+        <span style="font-size:12.5px;margin-left:8px;">주소록</span>
+        <select class="cell l" data-rnd-addr style="width:170px;"><option value="">— 주소 선택 —</option>${S.settings.addresses.map((a,k)=>`<option value="${k}">${esc(a.label||a.name)}</option>`).join("")}</select>
+        <button class="mini" data-rnd="saveaddr">이 주소 주소록에 저장</button>
+        <span style="font-size:11.5px;color:var(--muted);flex-basis:100%;">엣시 주문 파일 상품 중 $${S.settings.randomMin}~$${S.settings.randomMax} 상품을 겹치지 않게 뽑고, 수량은 1~2개로 넣어요.</span>
+      </div>` : ""}
       <div class="sec-title">받는 사람</div>
       <div class="grid g4">
         ${fld(s,"name","이름",{max:35,cls:"span2"})}
@@ -1279,6 +1355,23 @@ function rerenderShip(s){
 }
 shipsEl.addEventListener("click", e=>{
   const s = shipByEl(e.target); if(!s) return;
+  const rb = e.target.closest("[data-rnd]");
+  if(rb){
+    if(rb.dataset.rnd==="redraw"){
+      if(!confirm("상품을 전부 새로 뽑을까요? (직접 고친 상품도 바뀌어요)")) return;
+      const n = s.lines.length || 20; s.lines = []; setRandomCount(s, n); rerenderShip(s);
+    }
+    if(rb.dataset.rnd==="saveaddr"){
+      if(!clean(s.name)){ alert("받는 사람 이름을 먼저 넣어 주세요."); return; }
+      const label = prompt("주소록에 저장할 이름 (예: 모아포스트 Ahmed)", s.name); if(label===null) return;
+      const a = {label: clean(label)||s.name}; ["name","company","phone","email","line1","line2","line3","city","state","zip","tin","code"].forEach(k=>a[k]=s[k]||"");
+      const ex = S.settings.addresses.findIndex(x=>x.label===a.label);
+      if(ex>=0){ if(!confirm(`"${a.label}" 주소를 지금 내용으로 바꿀까요?`)) return; S.settings.addresses[ex] = a; }
+      else S.settings.addresses.push(a);
+      saveSettings(); renderSettings(); rerenderShip(s);
+    }
+    return;
+  }
   const dl = e.target.closest("[data-del-line]");
   if(dl){
     const l = s.lines[+dl.dataset.delLine];
@@ -1344,6 +1437,7 @@ shipsEl.addEventListener("input", e=>{
     const cnt = t.closest(".ship").querySelector(`[data-cnt="${k}"]`);
     if(cnt){ const mx = +cnt.dataset.max || 35; cnt.textContent = `${t.value.length}/${mx}`; cnt.classList.toggle("over", t.value.length>mx); }
     if(k==="name") t.closest(".ship").querySelector(".ship-title").firstChild.textContent = t.value + " ";
+    if(k==="refNo"){ const m = t.closest(".ship").querySelectorAll(".ship-meta")[1]; if(m) m.textContent = "🎲 랜덤 항목 인보이스" + (t.value?" · "+t.value:""); }
     refreshShip(s);
   } else if(t.dataset.cpk){
     const cp = s.coupons[+t.closest("tr").dataset.cpi];
@@ -1363,6 +1457,11 @@ shipsEl.addEventListener("input", e=>{
 });
 shipsEl.addEventListener("change", e=>{
   const s = shipByEl(e.target); if(!s) return;
+  if(e.target.dataset.rk2==="count"){ setRandomCount(s, e.target.value); rerenderShip(s); return; }
+  if(e.target.hasAttribute("data-rnd-addr")){
+    const a = S.settings.addresses[+e.target.value]; if(a){ applyAddress(s, a); rerenderShip(s); }
+    return;
+  }
   if(e.target.dataset.k==="boxIdx"){
     s.boxIdx = +e.target.value;
     const b = S.settings.boxes[s.boxIdx];
@@ -1394,7 +1493,7 @@ function invoiceData(s){
   // 번호 매기기 (구분줄 제외)
   let n = 0; list.forEach(x=>{ if(!x.sep) x.no = ++n; });
   return {
-    orderNo: s.ids.map(x=>"#"+x).join(", "),
+    orderNo: orderNoOf(s, ", "),
     invDate: fmtInvDate(s.invDate), shipDate: fmtInvDate(s.shipDate),
     taxId: s.taxId,
     sender: st.sender, senderPhone: st.invoicePhone,
@@ -1990,6 +2089,29 @@ function renderSettings(){
     <p class="hint">순서: 이름 · 가로(cm) · 세로(cm) · 높이(cm) · 무게(kg)</p>
     <button class="mini" id="btnAddBox" style="margin-top:6px;">+ 박스 추가</button>
     <div class="divider"></div>
+    <div class="sec-title">주소록 (랜덤 인보이스용)</div>
+    ${st.addresses.length ? st.addresses.map((a,i)=>`<div class="ship" style="margin-top:10px;"><div class="ship-body"><div class="grid g4">
+      <div class="f"><label>주소록 이름</label><input data-addr="${i}" data-ak="label" value="${esc(a.label)}"></div>
+      <div class="f"><label>받는 사람</label><input data-addr="${i}" data-ak="name" value="${esc(a.name)}"></div>
+      <div class="f"><label>회사명</label><input data-addr="${i}" data-ak="company" value="${esc(a.company)}"></div>
+      <div class="f"><label>전화번호</label><input data-addr="${i}" data-ak="phone" value="${esc(a.phone)}"></div>
+      <div class="f span2"><label>주소 1</label><input data-addr="${i}" data-ak="line1" value="${esc(a.line1)}"></div>
+      <div class="f span2"><label>주소 2</label><input data-addr="${i}" data-ak="line2" value="${esc(a.line2)}"></div>
+      <div class="f"><label>도시</label><input data-addr="${i}" data-ak="city" value="${esc(a.city)}"></div>
+      <div class="f"><label>주 / 지역</label><input data-addr="${i}" data-ak="state" value="${esc(a.state)}"></div>
+      <div class="f"><label>우편번호</label><input data-addr="${i}" data-ak="zip" value="${esc(a.zip)}"></div>
+      <div class="f"><label>국가 코드</label><input data-addr="${i}" data-ak="code" value="${esc(a.code)}" placeholder="예: US"></div>
+      <div class="f span2"><label>이메일</label><input data-addr="${i}" data-ak="email" value="${esc(a.email)}"></div>
+      <div class="f"><label>Tax ID / 통관번호</label><input data-addr="${i}" data-ak="tin" value="${esc(a.tin)}"></div>
+      <div class="f" style="display:flex;align-items:flex-end;justify-content:flex-end;"><button class="mini ghost" data-deladdr="${i}">이 주소 삭제</button></div>
+    </div></div></div>`).join("") : `<p class="hint">아직 저장된 주소가 없어요. 랜덤 인보이스 카드에서 받는 사람을 입력한 뒤 "이 주소 주소록에 저장"을 누르거나, 아래 버튼으로 추가하세요.</p>`}
+    <button class="mini" id="btnAddAddr" style="margin-top:10px;">+ 주소 추가</button>
+    <div class="grid g4" style="margin-top:12px;">
+      <div class="f"><label>랜덤 상품 최저가 ($)</label><input data-set="randomMin" value="${esc(st.randomMin)}"></div>
+      <div class="f"><label>랜덤 상품 최고가 ($)</label><input data-set="randomMax" value="${esc(st.randomMax)}"></div>
+    </div>
+    <p class="hint">주소록은 이 컴퓨터 브라우저에만 저장되고 GitHub에는 올라가지 않아요. "설정 파일로 저장"을 하면 그 파일에 주소도 들어가니 공개된 곳에 올리지 마세요.</p>
+    <div class="divider"></div>
     <div class="sec-title">다른 컴퓨터와 설정 맞추기</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <button class="mini teal" id="btnExportSettings">⬇ 설정 파일로 저장</button>
@@ -2038,6 +2160,15 @@ function renderSettings(){
   };
   area.querySelectorAll("[data-delbox]").forEach(el=>el.onclick=()=>{ if(S.settings.boxes.length<=1) return; S.settings.boxes.splice(+el.dataset.delbox,1); saveSettings(); renderSettings(); });
   $("btnAddRule").onclick = ()=>{ S.settings.rules.push({label:"",countries:"",taxId:"",duty:"",extraLabel:"",extraRequired:false,cpscOn:false,cpscDisclaim:"A",cpscUse:"130.006",cpscIdType:"SKU",euIdOn:false,euStd:"NA",hs:"",memo:""}); saveSettings(); renderSettings(); };
+  area.querySelectorAll("[data-addr]").forEach(el=>el.addEventListener("input",()=>{
+    const a = S.settings.addresses[+el.dataset.addr]; a[el.dataset.ak] = el.dataset.ak==="code" ? el.value.toUpperCase().trim() : el.value; saveSettings();
+  }));
+  area.querySelectorAll("[data-deladdr]").forEach(el=>el.onclick=()=>{
+    const a = S.settings.addresses[+el.dataset.deladdr];
+    if(!confirm(`"${a.label||a.name}" 주소를 삭제할까요?`)) return;
+    S.settings.addresses.splice(+el.dataset.deladdr,1); saveSettings(); renderSettings();
+  });
+  $("btnAddAddr").onclick = ()=>{ S.settings.addresses.push({label:"새 주소",name:"",company:"",phone:"",email:"",line1:"",line2:"",line3:"",city:"",state:"",zip:"",code:"",tin:""}); saveSettings(); renderSettings(); };
   $("btnAddBox").onclick = ()=>{ S.settings.boxes.push({name:"새 박스",l:0,w:0,h:0,kg:0}); saveSettings(); renderSettings(); };
   $("btnResetSettings").onclick = ()=>{ if(!confirm("설정을 처음 값으로 되돌릴까요?")) return; S.settings = structuredClone(DEFAULT_SETTINGS); saveSettings(); renderSettings(); };
 }
