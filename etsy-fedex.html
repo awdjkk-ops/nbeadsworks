@@ -442,6 +442,8 @@ const DEFAULT_SETTINGS = {
   dutyDefault: "RECIPIENT",
   pidPrefix: "BM",
   special: "Order list or packing list is attached",
+  material: "Brass (base metal), plated",
+  manufacturer: "TAE HWA METAL\nTrillion Building, #613, 6F 9-gil Sowol-ro,\nJung-gu, Seoul 04626 Republic of Korea\nTEL: +82-2-319-9190\nE-Mail: ymust93@gmail.com",
   rules: [
     {label:"유럽 (EU)", countries:EU.join(","), hs:"7117.19", taxId:"IM3720000224", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:true, euStd:"NA", memo:""},
     {label:"영국", countries:"GB", taxId:"370 6004 28", duty:"", extraLabel:"", extraRequired:false, cpscOn:false, cpscDisclaim:"A", cpscUse:"130.006", cpscIdType:"SKU", euIdOn:false, euStd:"NA", memo:""},
@@ -922,6 +924,7 @@ function taxIdFor(code){ return ruleFor(code).taxId; }
 function applyRule(s){
   const r = ruleFor(s.code);
   s.hs = r.hs || S.settings.hs;
+  s.incoterm = r.duty==="SENDER" ? "DDP" : "DAP"; s.incotermManual = false;
   s.taxId = r.taxId; s.duty = r.duty; s.extraLabel = r.extraLabel; s.extraRequired = r.extraRequired;
   s.cpscOn = r.cpscOn; s.cpscDisclaim = r.cpscDisclaim; s.cpscUse = r.cpscUse; s.cpscIdType = r.cpscIdType;
   s.euIdOn = r.euIdOn; s.euStd = r.euStd; s.euMerchant = null; s.euNonStd = null;
@@ -1096,6 +1099,7 @@ function issues(s){
   if(s.extraRequired && !clean(s.tin)) e.push(`${s.extraLabel||"수취인 추가 정보"} 없음`);
   if(clean(s.tin).length>18) e.push("수취인 Tax ID 18자 초과");
   if(s.cpscOn && !s.cpscDisclaim) e.push("CPSC 이유");
+  if(!clean(s.email)) w.push("이메일 없음");
   if(!s.hs) w.push("HS코드 없음");
   if(!s.taxId && (EU.includes(s.code) || s.code==="GB")) w.push("세금번호 비어 있음");
   return {e, w};
@@ -1246,6 +1250,7 @@ function shipHTML(s, i){
       <div class="sec-title">청구 · CPSC · EU 제품 ID</div>
       <div class="grid g4">
         <div class="f"><label>운송비 청구 대상</label><input value="내 고객번호" disabled style="background:#f7f6f2;color:var(--muted)"></div>
+        <div class="f"><label>인도조건 (Incoterms)</label><select data-k="incoterm">${["DAP","DDP","DPU","CPT","CIP","FCA","EXW"].map(v=>`<option ${s.incoterm===v?"selected":""}>${v}</option>`).join("")}</select></div>
         <div class="f"><label>관세·세금·수수료 청구 대상</label><select data-k="duty">${DUTY_OPTS.map(([v,t])=>`<option value="${v}" ${s.duty===v?"selected":""}>${t}</option>`).join("")}</select></div>
         <div class="f span2" data-f="payerAcct" style="${s.duty==="RECIPIENT"?"":"display:none"}"><label>수취인 FedEx 고객번호 (있을 때만)</label><input data-k="payerAcct" value="${esc(s.payerAcct)}" placeholder="없으면 비워 두세요"></div>
       </div>
@@ -1424,6 +1429,8 @@ shipsEl.addEventListener("input", e=>{
     const k = t.dataset.k;
     if(k==="boxIdx") return;
     if(k==="cpscOn"){ s.cpscOn = !!t.value; refreshShip(s); return; }
+    if(k==="incoterm"){ s.incoterm = t.value; s.incotermManual = true; return; }
+    if(k==="duty" && !s.incotermManual){ s.incoterm = t.value==="SENDER" ? "DDP" : "DAP"; const ic = t.closest(".ship").querySelector('[data-k="incoterm"]'); if(ic) ic.value = s.incoterm; }
     if(k==="cpscPid"){ s.cpscPid = t.value; return; }
     if(k==="euIdOn"){ s.euIdOn = !!t.value; refreshShip(s); return; }
     if(k==="euMerchant"){ s.euMerchant = t.value; return; }
@@ -1500,7 +1507,10 @@ function invoiceData(s){
     purpose: st.purposeText, origin: st.origin, remark: s.desc,
     consignee: {tin:s.tin, name:s.name, phone: s.phone ? prettyPhone(s.phone) : "", email:s.email, lines: consigneeLines(s)},
     desc: s.desc, hs: s.hs, qty: c.qty, unitValue: c.unitValue, total: c.total,
-    currency: st.currency, special: st.special, list
+    currency: st.currency, special: st.special, list,
+    incoterm: s.incoterm || (s.duty==="SENDER" ? "DDP" : "DAP"), material: st.material || "",
+    manufacturer: String(st.manufacturer||"").split("\n").map(x=>x.trim()).filter(Boolean).slice(0,5),
+    weight: num(s.kg)
   };
 }
 function prettyPhone(p){
@@ -1585,6 +1595,11 @@ async function buildPdf(s){
   font("normal",8.5);
   D.consignee.lines.slice(0,7).forEach(ln=>{ if(y < yTable-1.5){ txt(ln, X0+2, y); y += 4.2; } });
   labelVal("BUYER/IMPORTER : ", "Same as Consignee", MID+2, yCons+5);
+  labelVal("INCOTERMS: ", D.incoterm, MID+2, yCons+14.2);
+  if(D.material){ font("bold",8.5); txt("MATERIAL:", MID+2, yCons+18.8); font("normal",8.5);
+    doc.splitTextToSize(T(D.material), X1-(MID+20)-2).slice(0,2).forEach((ln,i)=>doc.text(ln, MID+20, yCons+18.8+i*4.2)); }
+  if(D.manufacturer.length){ font("bold",8.5); txt("MANUFACTURER:", MID+2, yCons+30); font("normal",8.5);
+    D.manufacturer.forEach((ln,i)=>txt(ln, MID+2, yCons+34.6+i*4.4)); }
   // goods table
   const cols = [X0, X0+20, MID, MID+24, MID+44, MID+62, MID+76, X1];
   doc.line(X0, yTable, X1, yTable); doc.line(X0, yTableHead, X1, yTableHead);
@@ -1604,6 +1619,7 @@ async function buildPdf(s){
   const yCur = y + Math.max(1,dl.length)*4.2 + 2;
   lw(0.2); doc.line(X0+2, yCur, X1-2, yCur); lw(0.3);
   font("bold",8.5); txt("Currency:", cols[5]+1, yCur+4.6); txt(D.currency, cols[7]-2, yCur+4.6, {align:"right"});
+  if(D.weight>0){ font("bold",8.5); txt("Total Gross Weight:", cols[1]+2, yCur+4.6); font("normal",8.5); txt(`${(Math.round(D.weight*100)/100).toFixed(2)} kg`, cols[1]+34, yCur+4.6); }
   // special / signed
   doc.line(X0, ySpecial, X1, ySpecial);
   font("bold",8.5); txt("SPECIAL INSTRUCTIONS", X0+2, ySpecial+4.6);
@@ -1747,7 +1763,8 @@ async function buildInvXlsx(s){
     ["수취인 이름", s.name], ["수취인 TEL", D.consignee.phone], ["수취인 E-Mail", s.email||""],
     ["주소 1", lines[0]], ["주소 2", lines[1]], ["주소 3", lines[2]], ["주소 4", lines[3]], ["주소 5", lines[4]], ["주소 6", lines[5]],
     ["품명 (Description of Goods)", s.desc], ["HS 코드", s.hs], ["원산지", st.origin], ["통화", st.currency],
-    ["전체 할인 % (벨류 줄이기)", num(s.globalPct)]
+    ["전체 할인 % (벨류 줄이기)", num(s.globalPct)],
+    ["총 무게 (kg)", num(s.kg)], ["인도조건 (Incoterms)", s.incoterm || (s.duty==="SENDER"?"DDP":"DAP")], ["재질 (MATERIAL)", st.material||""]
   ];
   inputs.forEach(([label, val, fmt], i)=>{
     const r = 3 + i;
@@ -1757,7 +1774,7 @@ async function buildInvXlsx(s){
   });
   // N3 주문번호 · N4 날짜 · N5 발송일 · N6 내 세금번호 · N7 고객 세금번호 · N8 이름 · N9 TEL · N10 이메일
   // N11~N16 주소 · N17 품명 · N18 HS · N19 원산지 · N20 통화 · N21 전체 할인 %
-  set("M22", "상품은 아래 Order List 각 줄 오른쪽(M~U열)에서 고치세요. 할인 %는 10 = 10% 예요.", {font:{color:{argb:"FF6B7280"}}});
+  set("M25", "상품은 아래 Order List 각 줄 오른쪽(M~U열)에서 고치세요. 할인 %는 10 = 10% 예요.", {font:{color:{argb:"FF6B7280"}}});
 
   /* ---------- 1페이지: COMMERCIAL INVOICE ---------- */
   ws.mergeCells("A1:K1");
@@ -1787,6 +1804,10 @@ async function buildInvXlsx(s){
 
   set("B13", "CONSIGNEE", {b:true});
   set("G13", "BUYER/IMPORTER : Same as Consignee", {b:true});
+  set("G15", F(`="INCOTERMS: "&N23`, `INCOTERMS: ${D.incoterm}`), {b:true});
+  ws.mergeCells("G16:K17"); set("G16", F(`=IF(N24="","","MATERIAL: "&N24)`, D.material ? `MATERIAL: ${D.material}` : ""), {b:true, align:{wrapText:true, vertical:"top"}});
+  set("G19", "MANUFACTURER:", {b:true});
+  D.manufacturer.forEach((ln,i)=>set(`G${20+i}`, ln));
   set("B14", F(`="Tax ID#: "&N7`, `Tax ID#: ${clean(s.tin)}`), {b:true});
   set("B15", F(`="Contact Name : "&N8`, `Contact Name : ${s.name}`), {b:true});
   set("B16", F(`="TEL : "&N9`, `TEL : ${D.consignee.phone}`), {b:true});
@@ -1896,6 +1917,7 @@ async function buildInvXlsx(s){
   set("J28", F(`IF(I28=0,0,ROUND(K28/I28,2))`, c.unitValue), {b:true, fmt:NUM, align:{vertical:"top"}});
   for(let cc=2;cc<=11;cc++){ const cell = ws.getCell(32,cc); cell.border = Object.assign({}, cell.border||{}, {top:{style:"hair"}}); }
   set("J33", "Currency:", {b:true});
+  set("B33", F(`=IF(N22>0,"Total Gross Weight: "&TEXT(N22,"0.00")&" kg","")`, D.weight>0 ? `Total Gross Weight: ${D.weight.toFixed(2)} kg` : ""), {b:true});
   set("K33", F("=N20", st.currency), {b:true, align:{horizontal:"right"}});
   edge(27,1,40,11);
   set("B41", "SPECIAL INSTRUCTIONS", {b:true});
@@ -1986,9 +2008,17 @@ async function buildFedexXlsx(){
    ===================================================================== */
 function checkAll(){
   const errs = S.ships.map((s,i)=>({i, e:issues(s).e})).filter(x=>x.e.length);
-  if(!errs.length) return true;
-  const msg = errs.slice(0,6).map(x=>`${x.i+1}번 (${S.ships[x.i].name}): ${x.e.join(", ")}`).join("\n");
-  return confirm(`아직 확인이 필요한 건이 있어요.\n\n${msg}${errs.length>6?"\n...":""}\n\n그래도 파일을 만들까요?`);
+  // 수취인 연락처(전화·이메일) 빠진 건은 따로 모아서 알려 줌
+  const contact = S.ships.map((s,i)=>{
+    const miss = []; if(!normPhone(s.phone)) miss.push("전화번호"); if(!clean(s.email)) miss.push("이메일");
+    return {i, miss};
+  }).filter(x=>x.miss.length);
+  if(!errs.length && !contact.length) return true;
+  let msg = "";
+  if(contact.length) msg += "📞 수취인 연락처가 빠진 건\n" + contact.slice(0,8).map(x=>`  ${x.i+1}번 ${S.ships[x.i].name||"(이름 없음)"}: ${x.miss.join("·")} 없음`).join("\n") + (contact.length>8?"\n  ...":"") + "\n\n";
+  const other = errs.map(x=>({i:x.i, e:x.e.filter(t=>!/전화번호 없음/.test(t))})).filter(x=>x.e.length);
+  if(other.length) msg += "⚠️ 그 밖에 확인이 필요한 건\n" + other.slice(0,6).map(x=>`  ${x.i+1}번 ${S.ships[x.i].name||"(이름 없음)"}: ${x.e.join(", ")}`).join("\n") + (other.length>6?"\n  ...":"") + "\n\n";
+  return confirm(msg + "그래도 파일을 만들까요?");
 }
 function stamp(){ return todayISO().replace(/-/g,""); }
 async function invoiceZip(zip){
@@ -2049,6 +2079,8 @@ function renderSettings(){
       ${inp("pidPrefix","No-standard PID 앞글자",st.pidPrefix)}
       ${inp("description","기본 품명",st.description,"span3")}
       ${inp("special","SPECIAL INSTRUCTIONS",st.special,"span3")}
+      ${inp("material","재질 (MATERIAL)",st.material,"span3")}
+      <div class="f span3"><label>제조업체 (MANUFACTURER) — 줄 그대로 인보이스에 표시, 최대 5줄</label><textarea data-set="manufacturer" rows="5">${esc(st.manufacturer)}</textarea></div>
       <div class="f span3"><label>회사 주소 블록 (인보이스에 줄 그대로 표시)</label><textarea data-set="sender.invoiceBlock" rows="5">${esc(sd.invoiceBlock)}</textarea></div>
       <div class="f"><label>기본 배송 서비스</label><select data-set="service">${SERVICES.map(([v,t])=>`<option value="${v}" ${st.service===v?"selected":""}>${t}</option>`).join("")}</select></div>
     </div>
